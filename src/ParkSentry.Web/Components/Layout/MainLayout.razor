@@ -21,14 +21,23 @@
                 <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER">
                     <NavLink href="/admin/sites">Sites</NavLink>
                     <NavLink href="/admin/bays">Parking Bays</NavLink>
+                    <NavLink href="/admin/rates">Rates</NavLink>
+                    <NavLink href="/admin/devices">Devices</NavLink>
+                    <NavLink href="/admin/reports">Reports</NavLink>
+                    <NavLink href="/admin/security-events">Security</NavLink>
+                </AuthorizeView>
+                <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
+                    <NavLink href="/admin/watchlist">Watchlist</NavLink>
+                    <NavLink href="/admin/users">Users</NavLink>
+                    <NavLink href="/audit">Audit Log</NavLink>
+                </AuthorizeView>
+                <AuthorizeView Roles="SUPER_ADMIN">
+                    <NavLink href="/admin/system-settings">System Settings</NavLink>
                 </AuthorizeView>
                 <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT">
                     <NavLink href="/guard">Guard Ops</NavLink>
                     <NavLink href="/vehicles">Vehicles</NavLink>
                     <NavLink href="/sessions">Sessions</NavLink>
-                </AuthorizeView>
-                <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
-                    <NavLink href="/audit">Audit Log</NavLink>
                 </AuthorizeView>
             </div>
             <div class="nav-footer">

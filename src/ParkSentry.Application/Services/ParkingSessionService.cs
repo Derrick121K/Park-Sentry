@@ -53,6 +53,14 @@ public class ParkingSessionService
             var site = await _db.Sites.FirstOrDefaultAsync(s => s.Id == request.SiteId && s.OrganizationId == orgId && !s.IsDeleted, ct)
                 ?? throw new NotFoundException("Site not found.");
 
+            if (!site.IsActive)
+                throw new ValidationException("Site is disabled.");
+
+            var organization = await _db.Organizations.FirstOrDefaultAsync(o => o.Id == orgId, ct)
+                ?? throw new NotFoundException("Organization not found.");
+            if (!organization.IsActive)
+                throw new ValidationException("Organization is disabled.");
+
             var watchlist = await _db.WatchlistEntries
                 .FirstOrDefaultAsync(w => w.OrganizationId == orgId && w.NormalizedRegistration == normalized && w.IsActive, ct);
 
@@ -85,11 +93,17 @@ public class ParkingSessionService
             ParkingBay? bay = null;
             if (request.ParkingBayId.HasValue)
             {
+                var candidateBay = await _db.ParkingBays
+                    .FirstOrDefaultAsync(b => b.Id == request.ParkingBayId && b.OrganizationId == orgId && !b.IsDeleted, ct)
+                    ?? throw new NotFoundException("Parking bay not found.");
+
+                if (candidateBay.Status == BayStatus.Maintenance)
+                    throw new ValidationException("Parking bay is disabled for maintenance.");
+
                 if (!await _bayOccupancy.TryOccupyBayAsync(request.ParkingBayId.Value, orgId, ct))
                     throw new ValidationException("Parking bay is no longer available.");
 
-                bay = await _db.ParkingBays
-                    .FirstOrDefaultAsync(b => b.Id == request.ParkingBayId && b.OrganizationId == orgId, ct);
+                bay = candidateBay;
             }
 
             var session = new ParkingSession
@@ -232,6 +246,11 @@ public class ParkingSessionService
 
             if (paymentResult?.Success == true)
             {
+                var method = _paymentProvider.IsMock ? PaymentMethod.Mock :
+                    string.Equals(_paymentProvider.ProviderName, "Manual", StringComparison.OrdinalIgnoreCase)
+                        ? PaymentMethod.Cash
+                        : PaymentMethod.Online;
+
                 var payment = new Payment
                 {
                     OrganizationId = orgId,
@@ -239,7 +258,7 @@ public class ParkingSessionService
                     Amount = outstanding,
                     Currency = currency,
                     Status = PaymentStatus.Successful,
-                    Method = PaymentMethod.Mock,
+                    Method = method,
                     Provider = paymentResult.Provider,
                     ProviderTransactionId = paymentResult.TransactionId,
                     IdempotencyKey = request.IdempotencyKey,
@@ -253,6 +272,11 @@ public class ParkingSessionService
                 _db.Payments.Add(payment);
                 session.AmountPaid += outstanding;
                 await _audit.LogAsync(AuditAction.Payment, nameof(Payment), payment.Id.ToString(), $"Payment processed for session {session.Id}", cancellationToken: ct);
+            }
+            else if (paymentResult is { Success: false })
+            {
+                await _audit.LogAsync(AuditAction.PaymentFailed, nameof(ParkingSession), session.Id.ToString(),
+                    paymentResult.FailureReason ?? paymentResult.ErrorMessage ?? "Payment failed", cancellationToken: ct);
             }
 
             session.ParkingFee = parkingFee;

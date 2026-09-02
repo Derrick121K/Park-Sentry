@@ -20,13 +20,16 @@ public class WebTestFactory : WebApplicationFactory<Web::Program>, IAsyncLifetim
         builder.UseSetting("Jwt:Key", "TestJwtKey_AtLeast32CharactersLong_ForIntegration!");
         builder.UseSetting("Jwt:Issuer", "ParkSentry");
         builder.UseSetting("Jwt:Audience", "ParkSentry.Api");
+        builder.UseSetting("Integrations:Mode", "Demo");
+        builder.UseSetting("Payments:Provider", "Mock");
+        builder.UseSetting("Scanning:Provider", "Browser");
     }
 
     public async Task InitializeAsync()
     {
         if (_initialized) return;
         await DataSeeder.ApplyMigrationsAsync(Services);
-        await TestIsolationDataSeeder.SeedAsync(Services);
+        await DatabaseReset.ResetAndSeedAsync(Services);
         _initialized = true;
     }
 

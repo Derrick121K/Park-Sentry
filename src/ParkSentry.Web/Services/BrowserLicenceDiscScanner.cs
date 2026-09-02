@@ -49,14 +49,18 @@ public class CameraScannerInterop(IJSRuntime js) : ICameraScannerInterop
 }
 
 /// <summary>
-/// Browser camera scanner — demo mode only. Does not fabricate OCR results.
+/// Browser camera capture — not OCR. Capture confirms image acquisition only; registration must be entered manually unless a future OCR provider is configured.
 /// </summary>
 public class BrowserLicenceDiscScanner(ICameraScannerInterop camera) : ILicenceDiscScanner
 {
-    public string ProviderName => "DEMO / BROWSER CAMERA";
+    public string ProviderName => "BROWSER CAMERA CAPTURE";
     public bool IsDemo => true;
+    public bool SupportsOcr => false;
 
-    public async Task<ScanResult> ScanAsync(CancellationToken cancellationToken = default)
+    public Task<ScanResult> ScanAsync(CancellationToken cancellationToken = default) =>
+        ScanAsync(new ScanRequest(), cancellationToken);
+
+    public async Task<ScanResult> ScanAsync(ScanRequest request, CancellationToken cancellationToken = default)
     {
         var capture = await camera.CaptureDemoAsync(cancellationToken);
         return MapCapture(capture);
@@ -65,13 +69,25 @@ public class BrowserLicenceDiscScanner(ICameraScannerInterop camera) : ILicenceD
     public ScanResult ParseManualInput(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
-            return new ScanResult(false, null, null, null, "Registration number is required.", ProviderName);
+            return new ScanResult(false, null, null, null, "Registration number is required.", ProviderName,
+                Status: ScanStatus.Failed, Error: ScanError.NoRegistrationDetected,
+                ScanProvider: ScanProvider.Manual, IsOcrResult: false);
 
         var normalized = RegistrationNormalizer.Normalize(input);
-        return new ScanResult(true, normalized, null, 1.0, null, ProviderName, input.Trim());
+        return new ScanResult(true, normalized, null, 1.0, null, ProviderName, input.Trim(),
+            Status: ScanStatus.ManualFallback, Error: ScanError.None,
+            ScanId: Guid.NewGuid(), TimestampUtc: DateTime.UtcNow,
+            ScanProvider: ScanProvider.Manual, IsOcrResult: false);
     }
 
     private ScanResult MapCapture(JsCaptureResult capture) =>
         new(capture.Success, capture.RegistrationNumber, null, capture.Confidence,
-            capture.ErrorMessage, capture.Provider ?? ProviderName, capture.RawDetectedText);
+            capture.ErrorMessage, capture.Provider ?? ProviderName, capture.RawDetectedText,
+            Status: capture.Success ? ScanStatus.Captured : ScanStatus.Failed,
+            Error: capture.Success ? ScanError.None : ScanError.CaptureFailed,
+            ScanId: Guid.NewGuid(),
+            TimestampUtc: DateTime.UtcNow,
+            Warnings: ["Browser capture is not OCR. Enter or confirm the registration manually."],
+            ScanProvider: ScanProvider.Browser,
+            IsOcrResult: false);
 }

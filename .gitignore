@@ -32,8 +32,14 @@ artifacts/
 ## Environment
 .env
 .env.local
+.env.production
+deploy/.env.production
 appsettings.*.local.json
 secrets.json
+backups/
+*.sql
+*.sql.gz
+
 
 ## OS
 .DS_Store

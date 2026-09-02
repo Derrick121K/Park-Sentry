@@ -1,0 +1,52 @@
+@page "/admin/reports"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
+@inject ReportingService ReportingService
+@rendermode InteractiveServer
+
+<PageTitle>Reports - ParkSentry</PageTitle>
+
+<h1>Operational Report</h1>
+<p class="muted">Aggregated tenant metrics. Values are UTC date-filtered and organization-isolated.</p>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+else if (Report is not null)
+{
+    <div class="stats-grid">
+        <div class="stat"><span>Active sessions</span><strong>@Report.ActiveSessions</strong></div>
+        <div class="stat"><span>Entries</span><strong>@Report.DailyEntries</strong></div>
+        <div class="stat"><span>Exits</span><strong>@Report.DailyExits</strong></div>
+        <div class="stat"><span>Revenue</span><strong>@Report.Revenue.ToString("0.00")</strong></div>
+        <div class="stat"><span>Outstanding</span><strong>@Report.OutstandingPayments.ToString("0.00")</strong></div>
+        <div class="stat"><span>Safety fees</span><strong>@Report.SafetyFees.ToString("0.00")</strong></div>
+        <div class="stat"><span>Security events</span><strong>@Report.SecurityEvents</strong></div>
+        <div class="stat"><span>Watchlist hits</span><strong>@Report.WatchlistHits</strong></div>
+        <div class="stat"><span>Bay utilization</span><strong>@Report.BayUtilizationPercent%</strong></div>
+    </div>
+
+    <div class="card">
+        <h2>Payment methods</h2>
+        <table>
+            <thead><tr><th>Method</th><th>Count</th><th>Amount</th></tr></thead>
+            <tbody>
+            @foreach (var m in Report.PaymentMethodTotals)
+            {
+                <tr><td>@m.Method</td><td>@m.Count</td><td>@m.Amount.ToString("0.00")</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private OperationalReportDto? Report;
+    private string? Error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { Report = await ReportingService.GetOperationalReportAsync(); }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}

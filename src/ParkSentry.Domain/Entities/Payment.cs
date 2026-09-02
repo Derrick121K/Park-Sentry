@@ -14,6 +14,7 @@ public class Payment : BaseEntity, ITenantEntity
     public string Provider { get; set; } = "Mock";
     public string? ProviderTransactionId { get; set; }
     public string? IdempotencyKey { get; set; }
+    public string? FailureReason { get; set; }
     public DateTime? CompletedAt { get; set; }
 
     public Organization Organization { get; set; } = null!;

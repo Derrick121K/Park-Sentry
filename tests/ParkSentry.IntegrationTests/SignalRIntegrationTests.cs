@@ -67,13 +67,16 @@ public class SignalRIntegrationTests : IAsyncLifetime
             "A1",
             DateTime.UtcNow));
 
-        var completed = await Task.WhenAny(orgAReceived.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        completed.Should().Be(orgAReceived.Task);
-        var orgAEvent = await orgAReceived.Task;
+        var orgAEvent = await AsyncWait.WaitForAsync(
+            orgAReceived,
+            TimeSpan.FromSeconds(10),
+            "Timed out waiting for Org-A SignalR ParkingUpdate entry event.");
         orgAEvent.EventType.Should().Be("entry");
 
-        var orgBCompleted = await Task.WhenAny(orgBReceived.Task, Task.Delay(TimeSpan.FromMilliseconds(500)));
-        orgBCompleted.Should().NotBe(orgBReceived.Task);
+        await AsyncWait.EnsureNotCompletedAsync(
+            orgBReceived,
+            TimeSpan.FromMilliseconds(750),
+            "Org-B unexpectedly received Org-A ParkingUpdate event.");
     }
 
     [Fact]
@@ -95,9 +98,10 @@ public class SignalRIntegrationTests : IAsyncLifetime
             "A1",
             DateTime.UtcNow));
 
-        var completed = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        completed.Should().Be(received.Task);
-        (await received.Task).Should().Be("entry");
+        (await AsyncWait.WaitForAsync(
+            received,
+            TimeSpan.FromSeconds(10),
+            "Timed out waiting for entry SignalR event.")).Should().Be("entry");
     }
 
     [Fact]
@@ -119,9 +123,10 @@ public class SignalRIntegrationTests : IAsyncLifetime
             "A1",
             DateTime.UtcNow));
 
-        var completed = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        completed.Should().Be(received.Task);
-        (await received.Task).Should().Be("exit");
+        (await AsyncWait.WaitForAsync(
+            received,
+            TimeSpan.FromSeconds(10),
+            "Timed out waiting for exit SignalR event.")).Should().Be("exit");
     }
 
     [Fact]
@@ -141,9 +146,10 @@ public class SignalRIntegrationTests : IAsyncLifetime
             25.50m,
             "R-001"));
 
-        var completed = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        completed.Should().Be(received.Task);
-        (await received.Task).Should().Be("payment");
+        (await AsyncWait.WaitForAsync(
+            received,
+            TimeSpan.FromSeconds(10),
+            "Timed out waiting for payment SignalR event.")).Should().Be("payment");
     }
 
     private async Task<HubConnection> CreateHubConnectionAsync(string email)

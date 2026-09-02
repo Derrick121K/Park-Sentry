@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Unit tests
+        run: dotnet test tests/ParkSentry.UnitTests --no-build -c Release --verbosity normal
+
+      - name: Integration tests
+        run: dotnet test tests/ParkSentry.IntegrationTests --no-build -c Release --verbosity normal
+        env:
+          DOTNET_ENVIRONMENT: Testing
+
+      - name: Secret scan (heuristic)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -n -I -E '(password|secret|apikey|api_key|connectionstring|jwt.*key|client_secret|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}' -- ':!*.md' ':!.env.example' ':!**/appsettings*.json' ':!**/DataSeeder.cs' ':!**/TestIsolationDataSeeder.cs' ':!**/ApiTestFactory.cs' ':!**/WebTestFactory.cs' ':!**/docs/**' || true; then
+            echo "Heuristic secret scan completed (review any matches above)."
+          fi
+
+      - name: Docker build API image
+        run: docker build -f deploy/docker/Dockerfile.api -t parksentry-api:ci .
+
+      - name: Docker build Web image
+        run: docker build -f deploy/docker/Dockerfile.web -t parksentry-web:ci .

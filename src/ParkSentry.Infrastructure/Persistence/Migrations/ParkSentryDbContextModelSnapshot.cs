@@ -203,6 +203,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrganizationId");
 
+                    b.HasIndex("OrganizationId", "CreatedAt");
+
                     b.ToTable("AuditLogs");
                 });
 
@@ -264,7 +266,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Identifier")
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -274,7 +277,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
@@ -284,7 +288,7 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId");
+                    b.HasIndex("OrganizationId", "Identifier");
 
                     b.ToTable("Devices");
                 });
@@ -332,7 +336,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<decimal>("SafetyFeeAmount")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<bool>("SafetyFeeEnabled")
                         .HasColumnType("boolean");
@@ -482,6 +487,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OrganizationId", "Status");
+
                     b.HasIndex("ParkingZoneId", "BayNumber")
                         .IsUnique();
 
@@ -498,7 +505,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal?>("DailyMaximum")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<int?>("GracePeriodMinutes")
                         .HasColumnType("integer");
@@ -511,7 +519,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
@@ -528,9 +537,9 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId");
-
                     b.HasIndex("SiteId");
+
+                    b.HasIndex("OrganizationId", "IsActive");
 
                     b.ToTable("ParkingRates");
                 });
@@ -542,13 +551,15 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("AmountPaid")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTime>("EntryTime")
                         .HasColumnType("timestamp with time zone");
@@ -572,10 +583,12 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("ParkingFee")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("SafetyFee")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<Guid>("SiteId")
                         .HasColumnType("uuid");
@@ -655,7 +668,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -665,7 +679,12 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("IdempotencyKey")
                         .HasMaxLength(128)
@@ -682,10 +701,12 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("ProviderTransactionId")
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -696,6 +717,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParkingSessionId");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
 
                     b.HasIndex("OrganizationId", "IdempotencyKey")
                         .IsUnique()
@@ -711,14 +734,16 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("PaymentId")
                         .HasColumnType("uuid");
@@ -750,7 +775,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ProviderName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("SettingsJson")
                         .HasColumnType("text");
@@ -760,7 +786,7 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId");
+                    b.HasIndex("OrganizationId", "ProviderName");
 
                     b.ToTable("ScannerConfigurations");
                 });
@@ -960,7 +986,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("NormalizedRegistration")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -1022,7 +1049,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("NormalizedRegistration")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -1036,7 +1064,8 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<bool>("ShowWarning")
                         .HasColumnType("boolean");

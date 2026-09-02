@@ -1,84 +1,132 @@
-using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
+using ParkSentry.Application.Configuration;
 using ParkSentry.Application.Interfaces;
 using ParkSentry.Application.Interfaces.Notifications;
 using ParkSentry.Application.Interfaces.Scanning;
-using ParkSentry.Infrastructure.Authorization;
 using ParkSentry.Infrastructure;
+using ParkSentry.Infrastructure.Authorization;
 using ParkSentry.Infrastructure.Identity;
 using ParkSentry.Infrastructure.Middleware;
 using ParkSentry.Infrastructure.Persistence;
 using ParkSentry.Web.Components;
 using ParkSentry.Web.Hubs;
 using ParkSentry.Web.Services;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
-builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddCascadingAuthenticationState();
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog((ctx, services, cfg) => cfg
+        .ReadFrom.Configuration(ctx.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "ParkSentry.Web")
+        .WriteTo.Console());
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+    builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddCascadingAuthenticationState();
+
+    builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddCookie(options =>
+        {
+            options.LoginPath = "/login";
+            options.AccessDeniedPath = "/access-denied";
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+            options.Cookie.Name = "ParkSentry.Auth";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+        });
+
+    builder.Services.AddAuthorization(AuthorizationPolicies.Configure);
+    builder.Services.AddScoped<AuthenticationStateProvider, IdentityAuthenticationStateProvider>();
+
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
+
+    builder.Services.AddControllers();
+    builder.Services.AddSignalR();
+    builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = 10 * 1024 * 1024);
+
+    builder.Services.AddScoped<IParkingNotificationService, SignalRParkingNotificationService>();
+    builder.Services.AddScoped<ICameraScannerInterop, CameraScannerInterop>();
+    builder.Services.AddScoped<ILicenceDiscScanner, BrowserLicenceDiscScanner>();
+    builder.Services.AddScoped<ParkingRealtimeService>();
+
+    builder.Services.AddRateLimiter(options =>
     {
-        options.LoginPath = "/login";
-        options.AccessDeniedPath = "/access-denied";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1)
+                }));
     });
 
-builder.Services.AddAuthorization(AuthorizationPolicies.Configure);
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityAuthenticationStateProvider>();
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    var healthChecks = builder.Services.AddHealthChecks();
+    if (!string.IsNullOrWhiteSpace(connectionString))
+        healthChecks.AddNpgSql(connectionString, name: "database", tags: ["ready"]);
 
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    var app = builder.Build();
 
-builder.Services.AddControllers();
-builder.Services.AddSignalR();
+    app.UseMiddleware<CorrelationIdMiddleware>();
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+    app.UseSerilogRequestLogging();
 
-// Web-specific services (override infrastructure defaults)
-builder.Services.AddScoped<IParkingNotificationService, SignalRParkingNotificationService>();
-builder.Services.AddScoped<ICameraScannerInterop, CameraScannerInterop>();
-builder.Services.AddScoped<ILicenceDiscScanner, BrowserLicenceDiscScanner>();
-builder.Services.AddScoped<ParkingRealtimeService>();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        app.UseHsts();
+    }
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    app.UseHttpsRedirection();
+    app.UseRateLimiter();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.UseAntiforgery();
 
-var healthChecks = builder.Services.AddHealthChecks();
-if (!string.IsNullOrWhiteSpace(connectionString))
-    healthChecks.AddNpgSql(connectionString, name: "database", tags: ["ready"]);
+    app.MapStaticAssets();
+    app.MapControllers();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+    app.MapHub<ParkingHub>("/hubs/parking").DisableAntiforgery();
+    app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+    app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
+    app.MapHealthChecks("/health");
 
-var app = builder.Build();
+    if (app.Environment.IsDevelopment())
+    {
+        await DataSeeder.ApplyMigrationsAsync(app.Services);
+        await DataSeeder.SeedDevelopmentDataAsync(app.Services);
+    }
 
-app.UseMiddleware<CorrelationIdMiddleware>();
-
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
+    app.Run();
 }
-
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
-app.UseAntiforgery();
-
-app.MapStaticAssets();
-app.MapControllers();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-app.MapHub<ParkingHub>("/hubs/parking").DisableAntiforgery();
-app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
-app.MapHealthChecks("/health");
-
-if (app.Environment.IsDevelopment())
+catch (Exception ex)
 {
-    await DataSeeder.ApplyMigrationsAsync(app.Services);
-    await DataSeeder.SeedDevelopmentDataAsync(app.Services);
+    Log.Fatal(ex, "ParkSentry Web terminated unexpectedly");
+    throw;
 }
-
-app.Run();
+finally
+{
+    Log.CloseAndFlush();
+}
 
 public partial class Program { }

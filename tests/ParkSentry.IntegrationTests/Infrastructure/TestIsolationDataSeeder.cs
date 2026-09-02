@@ -36,6 +36,20 @@ public static class TestIsolationDataSeeder
     public static Guid OrgBPaymentId { get; private set; }
     public static Guid OrgBAuditLogId { get; private set; }
 
+    public static void ResetStaticIds()
+    {
+        OrgAId = default;
+        OrgBId = default;
+        OrgASiteId = default;
+        OrgBSiteId = default;
+        OrgAVehicleId = default;
+        OrgBVehicleId = default;
+        OrgASessionId = default;
+        OrgBSessionId = default;
+        OrgBPaymentId = default;
+        OrgBAuditLogId = default;
+    }
+
     public static async Task SeedAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -50,7 +64,10 @@ public static class TestIsolationDataSeeder
         }
 
         if (await db.Organizations.AnyAsync(o => o.Name == "ORG-A Test Organization"))
+        {
+            await LoadStaticIdsAsync(db);
             return;
+        }
 
         var orgA = CreateOrganization("ORG-A Test Organization", "ORG-A");
         var orgB = CreateOrganization("ORG-B Test Organization", "ORG-B");
@@ -147,6 +164,27 @@ public static class TestIsolationDataSeeder
         await CreateUserAsync(userManager, OrgBAdminEmail, "ORG-B Admin", orgB.Id, AppRoles.OrganizationAdmin);
         await CreateUserAsync(userManager, OrgBGuardEmail, "ORG-B Guard", orgB.Id, AppRoles.SecurityGuard);
         await CreateUserAsync(userManager, OrgBCustomerEmail, "ORG-B Customer", orgB.Id, AppRoles.Customer);
+    }
+
+    private static async Task LoadStaticIdsAsync(ParkSentryDbContext db)
+    {
+        var orgA = await db.Organizations.AsNoTracking().SingleAsync(o => o.Name == "ORG-A Test Organization");
+        var orgB = await db.Organizations.AsNoTracking().SingleAsync(o => o.Name == "ORG-B Test Organization");
+        OrgAId = orgA.Id;
+        OrgBId = orgB.Id;
+
+        OrgASiteId = await db.Sites.AsNoTracking().Where(s => s.OrganizationId == orgA.Id).Select(s => s.Id).SingleAsync();
+        OrgBSiteId = await db.Sites.AsNoTracking().Where(s => s.OrganizationId == orgB.Id).Select(s => s.Id).SingleAsync();
+        OrgAVehicleId = await db.Vehicles.AsNoTracking().Where(v => v.OrganizationId == orgA.Id).Select(v => v.Id).SingleAsync();
+        OrgBVehicleId = await db.Vehicles.AsNoTracking().Where(v => v.OrganizationId == orgB.Id).Select(v => v.Id).SingleAsync();
+        OrgASessionId = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.OrganizationId == orgA.Id && s.Status == SessionStatus.Active)
+            .Select(s => s.Id).SingleAsync();
+        OrgBSessionId = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.OrganizationId == orgB.Id)
+            .Select(s => s.Id).SingleAsync();
+        OrgBPaymentId = await db.Payments.AsNoTracking().Where(p => p.OrganizationId == orgB.Id).Select(p => p.Id).SingleAsync();
+        OrgBAuditLogId = await db.AuditLogs.AsNoTracking().Where(a => a.OrganizationId == orgB.Id).Select(a => a.Id).SingleAsync();
     }
 
     private static Organization CreateOrganization(string name, string displayName) => new()

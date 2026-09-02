@@ -31,3 +31,11 @@ Role-based policies:
 ## Audit
 
 Append-only `AuditLogs` for login, entry/exit, payments, configuration changes.
+
+## Production release notes
+
+- FluentAssertions pinned to 7.x (Apache 2.0) for commercial use without Xceed licensing.
+- Production payments default to Manual; Mock requires explicit AllowDemoProviders.
+- Cookie auth uses HttpOnly + Secure (Production) + SameSite=Lax.
+- Security headers middleware and auth rate limiting are enabled.
+- Secrets must come from environment / user secrets / platform secret store — never source control.

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ParkSentry.Application.Interfaces;
 using ParkSentry.Domain.Enums;
 using ParkSentry.Infrastructure.Identity;
@@ -30,20 +31,22 @@ public class AccountController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromForm] string email, [FromForm] string password, [FromForm] string? returnUrl)
     {
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null || !user.IsActive)
         {
             _logger.LogWarning("Web login failed for {Email}: invalid credentials", email);
-            return Redirect($"/login?error=invalid");
+            return Redirect("/login?error=invalid");
         }
 
         var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: true);
         if (!result.Succeeded)
         {
             _logger.LogWarning("Web login failed for {Email}: sign-in rejected", email);
-            return Redirect($"/login?error=invalid");
+            await _audit.LogAsync(AuditAction.Login, "User", user.Id, "Failed web login attempt");
+            return Redirect("/login?error=invalid");
         }
 
         await _audit.LogAsync(AuditAction.Login, "User", user.Id, $"Web login: {user.Email}");

@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
 @inject ParkingSessionService SessionService
 @inject ILicenceDiscScanner Scanner
+@inject ParkSentry.Application.Interfaces.Payments.IPaymentProvider PaymentProvider
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @rendermode InteractiveServer
@@ -10,7 +11,11 @@
 
 <ConnectionStatus />
 
-<div class="demo-banner">MOCK PAYMENT PROVIDER — Development payments only</div>
+<div class="demo-banner">
+    @(PaymentProvider.IsMock
+        ? "DEMO/MOCK PAYMENT — not a real gateway settlement"
+        : $"Payment provider: {PaymentProvider.ProviderName} (desk recording unless a gateway is configured)")
+</div>
 
 <h1>Vehicle Exit</h1>
 
@@ -31,7 +36,7 @@
         </div>
 
         <button class="btn btn-primary btn-lg btn-block" @onclick="ProcessExit" disabled="@(Processing || !IsOnline)">
-            @(Processing ? "Processing..." : "Process Exit & Mock Payment")
+            @(Processing ? "Processing..." : (PaymentProvider.IsMock ? "Process Exit & Mock Payment" : "Process Exit & Record Payment"))
         </button>
     }
 

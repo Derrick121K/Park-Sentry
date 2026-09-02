@@ -48,3 +48,8 @@ public record ScanResult(
 Never report success if the scan did not actually succeed.
 
 See [mobile-scanning.md](mobile-scanning.md) for camera architecture and browser requirements.
+## Capture vs OCR
+
+Browser capture confirms an image was acquired. It does **not** perform OCR.
+ScanResult.IsOcrResult must remain false unless a real OCR provider is configured.
+Image retention defaults to off (Scanning:RetainImages=false).

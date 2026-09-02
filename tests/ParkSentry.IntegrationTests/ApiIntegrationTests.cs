@@ -200,6 +200,26 @@ public class TenantIsolationTests : IAsyncLifetime
         orgClaim!.Value.Should().Be(TestIsolationDataSeeder.OrgAId.ToString());
     }
 
+    [Fact]
+    public async Task OrgA_CannotReadOrgB_ViaReportsEndpoint()
+    {
+        var client = await CreateAuthenticatedClient(TestIsolationDataSeeder.OrgAAdminEmail);
+        var response = await client.GetAsync("/api/v1/reports/operational");
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        json.Should().NotContain(TestIsolationDataSeeder.OrgBId.ToString());
+        json.Should().NotContain(TestIsolationDataSeeder.OrgBVehicleReg);
+    }
+
+    [Fact]
+    public async Task InvalidJwt_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "not.a.valid.jwt");
+        var response = await client.GetAsync("/api/v1/vehicles");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     private async Task<HttpClient> CreateAuthenticatedClient(string email)
     {
         var client = _factory.CreateClient();

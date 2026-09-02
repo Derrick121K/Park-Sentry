@@ -21,13 +21,16 @@ public class ApiTestFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Jwt:Issuer", "ParkSentry");
         builder.UseSetting("Jwt:Audience", "ParkSentry.Api");
         builder.UseSetting("Jwt:ExpiryMinutes", "60");
+        builder.UseSetting("Integrations:Mode", "Demo");
+        builder.UseSetting("Payments:Provider", "Mock");
+        builder.UseSetting("Scanning:Provider", "Demo");
     }
 
     public async Task InitializeAsync()
     {
         if (_initialized) return;
         await DataSeeder.ApplyMigrationsAsync(Services);
-        await TestIsolationDataSeeder.SeedAsync(Services);
+        await DatabaseReset.ResetAndSeedAsync(Services);
         _initialized = true;
     }
 

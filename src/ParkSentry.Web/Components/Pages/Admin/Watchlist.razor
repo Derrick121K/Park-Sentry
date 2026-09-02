@@ -1,0 +1,82 @@
+@page "/admin/watchlist"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN")]
+@inject WatchlistService WatchlistService
+@rendermode InteractiveServer
+
+<PageTitle>Watchlist - ParkSentry</PageTitle>
+
+<h1>Watchlist</h1>
+<p class="muted">Block or warn on vehicle entry for flagged registrations.</p>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <h2>Add entry</h2>
+    <div class="form-grid">
+        <label>Registration <input @bind="NewRegistration" /></label>
+        <label>Reason <input @bind="NewReason" /></label>
+        <label><input type="checkbox" @bind="NewBlock" /> Block entry</label>
+        <label><input type="checkbox" @bind="NewWarn" /> Show warning</label>
+        <button class="btn btn-primary" @onclick="AddAsync" disabled="@Busy">Add</button>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Registration</th><th>Reason</th><th>Block</th><th>Warn</th><th>Active</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in Items)
+        {
+            <tr>
+                <td>@item.RegistrationNumber</td>
+                <td>@item.Reason</td>
+                <td>@(item.BlockEntry ? "Yes" : "No")</td>
+                <td>@(item.ShowWarning ? "Yes" : "No")</td>
+                <td>@(item.IsActive ? "Yes" : "No")</td>
+                <td>
+                    @if (item.IsActive)
+                    {
+                        <button class="btn btn-outline btn-sm" @onclick="() => DeactivateAsync(item.Id)">Deactivate</button>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<WatchlistDto> Items = [];
+    private string NewRegistration = "";
+    private string NewReason = "";
+    private bool NewBlock;
+    private bool NewWarn = true;
+    private string? Error;
+    private bool Busy;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => Items = (await WatchlistService.ListAsync()).ToList();
+
+    private async Task AddAsync()
+    {
+        Busy = true; Error = null;
+        try
+        {
+            await WatchlistService.CreateAsync(new CreateWatchlistRequest(NewRegistration, NewReason, NewBlock, NewWarn));
+            NewRegistration = ""; NewReason = "";
+            await ReloadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
+
+    private async Task DeactivateAsync(Guid id)
+    {
+        await WatchlistService.DeactivateAsync(id);
+        await ReloadAsync();
+    }
+}

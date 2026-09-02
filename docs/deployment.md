@@ -1,53 +1,51 @@
 # Deployment
 
-## Docker Compose (Development)
+## Local development database
 
 ```bash
 docker compose up -d
 ```
 
-## Production Checklist
+Uses `postgres:16-alpine` with a healthcheck. Do not expose this Postgres to the public Internet in production.
 
-1. Set strong `Jwt:Key` and database credentials via environment variables
-2. Configure HTTPS/TLS termination (reverse proxy) — **required for camera access**
-3. Run migrations: `dotnet ef database update`
-4. Set `ASPNETCORE_ENVIRONMENT=Production`
-5. Replace `MockPaymentProvider` with a real `IPaymentProvider`
-6. Replace demo scanner with production OCR provider (Build 2C)
-7. Generate PWA icons (192×192, 512×512 PNG) from `parksentrylogo.png`
-8. Configure logging (structured logs to file/service)
-9. Set up health check monitoring on `/health`
-10. Verify SignalR WebSocket connectivity through reverse proxy
-
-## HTTPS & Mobile Requirements
-
-- Camera access requires a **secure context** (HTTPS in production)
-- PWA installation requires valid manifest and service worker over HTTPS
-- SignalR requires WebSocket or long-polling support through any reverse proxy
-- See [mobile-scanning.md](mobile-scanning.md) and [pwa.md](pwa.md)
-
-## Environment Variables
+## Production architecture
 
 ```
-ConnectionStrings__DefaultConnection=Host=...;Database=parksentry;...
-Jwt__Key=...
-Jwt__Issuer=ParkSentry
-Jwt__Audience=ParkSentry.Api
-ASPNETCORE_ENVIRONMENT=Production
+Internet → Caddy (HTTPS) → Web/API containers → PostgreSQL (private network) → volume + backups
 ```
 
-## Hosting
+Artifacts:
 
-- **Web:** `dotnet publish src/ParkSentry.Web -c Release`
-- **API:** `dotnet publish src/ParkSentry.Api -c Release`
+- `deploy/docker/Dockerfile.api`
+- `deploy/docker/Dockerfile.web`
+- `deploy/docker/docker-compose.prod.yml`
+- `deploy/docker/Caddyfile`
+- `deploy/scripts/deploy.sh` / `deploy.ps1`
+- `deploy/scripts/backup.sh` / `restore.sh`
+- `deploy/.env.production.example`
 
-Both can run on Windows, Linux, or macOS. Container deployment supported via standard .NET Docker images.
+## Deploy steps
 
-## PWA Assets
+1. Copy `deploy/.env.production.example` → `deploy/.env.production` and set secrets
+2. Point DNS A/AAAA records for `PUBLIC_HOST` to the VPS
+3. Open firewall 80/443 only (not 5432)
+4. Run `./deploy/scripts/deploy.sh` (or `deploy.ps1`)
+5. Apply migrations in a controlled window
+6. Execute [smoke-test.md](smoke-test.md)
 
-Place production icons at:
+## HTTPS / PWA / camera
 
-- `src/ParkSentry.Web/wwwroot/icons/icon-192.png`
-- `src/ParkSentry.Web/wwwroot/icons/icon-512.png`
+HTTPS is mandatory in production for camera access and PWA installability.
 
-Update `manifest.json` to reference PNG icons when available. Build 2B ships SVG placeholders derived from the ParkSentry brand colors until PNG exports are supplied.
+## Payments / scanning
+
+Production defaults:
+
+- `Payments:Provider=Manual` (records desk payments; not a card gateway)
+- `Scanning:Provider=Browser` (capture + manual confirmation; not OCR)
+
+Do not enable Mock payments in Production without `Integrations:AllowDemoProviders=true`.
+
+## Health
+
+Monitor `/health/ready` behind the reverse proxy.

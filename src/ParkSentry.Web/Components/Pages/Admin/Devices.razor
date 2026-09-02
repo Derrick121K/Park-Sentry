@@ -1,0 +1,88 @@
+@page "/admin/devices"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
+@inject DeviceService DeviceService
+@rendermode InteractiveServer
+
+<PageTitle>Devices - ParkSentry</PageTitle>
+
+<h1>Devices &amp; Scanners</h1>
+<p class="muted">Scanner credentials are never shown here.</p>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <h2>Register device</h2>
+    <div class="form-grid">
+        <label>Name <input @bind="Name" /></label>
+        <label>Type <input @bind="DeviceType" /></label>
+        <label>Identifier <input @bind="Identifier" /></label>
+        <button class="btn btn-primary" @onclick="RegisterAsync">Register</button>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Devices</h2>
+    <table>
+        <thead><tr><th>Name</th><th>Type</th><th>Identifier</th><th>Active</th><th>Last seen</th></tr></thead>
+        <tbody>
+        @foreach (var d in DeviceList)
+        {
+            <tr>
+                <td>@d.Name</td>
+                <td>@(d.DeviceType ?? "-")</td>
+                <td>@(d.Identifier ?? "-")</td>
+                <td>@(d.IsActive ? "Yes" : "No")</td>
+                <td>@(d.LastSeenAt?.ToString("u") ?? "-")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Scanner configurations</h2>
+    <table>
+        <thead><tr><th>Provider</th><th>Active</th><th>Created</th></tr></thead>
+        <tbody>
+        @foreach (var s in Scanners)
+        {
+            <tr>
+                <td>@s.ProviderName</td>
+                <td>@(s.IsActive ? "Yes" : "No")</td>
+                <td>@s.CreatedAt.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<DeviceDto> DeviceList = [];
+    private List<ScannerConfigDto> Scanners = [];
+    private string Name = "";
+    private string? DeviceType;
+    private string? Identifier;
+    private string? Error;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        DeviceList = (await DeviceService.ListDevicesAsync()).ToList();
+        Scanners = (await DeviceService.ListScannersAsync()).ToList();
+    }
+
+    private async Task RegisterAsync()
+    {
+        try
+        {
+            await DeviceService.RegisterAsync(new RegisterDeviceRequest(Name, DeviceType, Identifier));
+            Name = ""; DeviceType = null; Identifier = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}

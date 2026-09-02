@@ -15,6 +15,13 @@ public static class DependencyInjection
         services.AddScoped<VehicleService>();
         services.AddScoped<ParkingSessionService>();
         services.AddScoped<DashboardService>();
+        services.AddScoped<ScanningPipelineService>();
+        services.AddScoped<ReportingService>();
+        services.AddScoped<WatchlistService>();
+        services.AddScoped<SecurityEventService>();
+        services.AddScoped<ParkingRateService>();
+        services.AddScoped<DeviceService>();
+        services.AddScoped<SystemSettingService>();
         return services;
     }
 }

@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Build.props ./
+COPY ParkSentry.slnx ./
+COPY src/ParkSentry.Domain/ParkSentry.Domain.csproj src/ParkSentry.Domain/
+COPY src/ParkSentry.Application/ParkSentry.Application.csproj src/ParkSentry.Application/
+COPY src/ParkSentry.Infrastructure/ParkSentry.Infrastructure.csproj src/ParkSentry.Infrastructure/
+COPY src/ParkSentry.Api/ParkSentry.Api.csproj src/ParkSentry.Api/
+RUN dotnet restore src/ParkSentry.Api/ParkSentry.Api.csproj
+COPY src/ ./src/
+RUN dotnet publish src/ParkSentry.Api/ParkSentry.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+COPY --from=build /app/publish .
+USER $APP_UID
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 CMD wget -qO- http://127.0.0.1:8080/health/live || exit 1
+ENTRYPOINT ["dotnet", "ParkSentry.Api.dll"]

@@ -21,7 +21,15 @@
         <h2 class="scan-subtitle">SCAN VEHICLE</h2>
     </div>
 
-    <div class="demo-banner">DEMO SCANNER — Camera preview available; OCR not yet implemented</div>
+    <div class="demo-banner">
+        @(Scanner.SupportsOcr ? $"Scanner: {Scanner.ProviderName}" : "CAMERA CAPTURE — OCR not configured. Confirm registration manually.")
+        @(Scanner.IsDemo ? " (Demo/capture provider)" : "")
+    </div>
+
+    @if (!string.IsNullOrEmpty(RegistrationSource))
+    {
+        <div class="alert alert-info">Registration source: <strong>@RegistrationSource</strong></div>
+    }
 
     @if (Step == ScanStep.Scan)
     {
@@ -105,6 +113,7 @@
     private string Registration = "", Make = "", Model = "", Message = "";
     private string DisplayRegistration = "", VehicleStatus = "UNKNOWN", StatusClass = "unknown";
     private string? WatchlistMessage;
+    private string? RegistrationSource;
     private bool Processing, IsError, Blocked, IsOnline = true;
     private DotNetObjectReference<ScanVehicle>? _onlineRef;
 
@@ -138,6 +147,11 @@
             return;
         }
 
+        RegistrationSource = result.IsOcrResult
+            ? $"Automatic scan ({result.Provider})"
+            : result.ScanProvider == ScanProvider.Browser
+                ? "Camera capture (manual confirmation required — not OCR)"
+                : $"Scanner ({result.Provider})";
         await ApplyScanResult(result);
     }
 
@@ -150,6 +164,7 @@
             IsError = true;
             return;
         }
+        RegistrationSource = "Manual entry";
         await ApplyScanResult(result);
     }
 
@@ -218,6 +233,7 @@
         DisplayRegistration = "";
         VehicleStatus = "UNKNOWN";
         WatchlistMessage = null;
+        RegistrationSource = null;
         Blocked = false;
         BayId = null;
     }

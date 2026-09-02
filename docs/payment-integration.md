@@ -42,3 +42,9 @@ Never store raw card details. All card processing must occur at the provider.
 Configured per organization:
 - `SafetyFeeEnabled`, `SafetyFeeType` (Fixed/Percentage), `SafetyFeeAmount`
 - Calculated by `PricingService.CalculateSafetyFee()`
+
+## Demo vs Production
+
+- **MockPaymentProvider**: Demo/Testing only (IsMock=true).
+- **ManualPaymentProvider**: Production-safe desk/cash/card-at-desk recording (IsMock=false). Not a card gateway.
+- Webhooks: IPaymentWebhookHandler is reserved for future gateways; authenticity validation is mandatory.

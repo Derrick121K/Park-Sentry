@@ -1,0 +1,62 @@
+@page "/admin/system-settings"
+@attribute [Authorize(Roles = "SUPER_ADMIN")]
+@inject SystemSettingService SystemSettingService
+@rendermode InteractiveServer
+
+<PageTitle>System Settings - ParkSentry</PageTitle>
+
+<h1>System Settings</h1>
+<p class="muted">Non-secret platform settings only. Secrets belong in environment variables.</p>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <div class="form-grid">
+        <label>Key <input @bind="Key" /></label>
+        <label>Value <input @bind="Value" /></label>
+        <label>Description <input @bind="Description" /></label>
+        <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Key</th><th>Value</th><th>Description</th><th>Updated</th></tr></thead>
+        <tbody>
+        @foreach (var s in Settings)
+        {
+            <tr>
+                <td>@s.Key</td>
+                <td>@s.Value</td>
+                <td>@(s.Description ?? "-")</td>
+                <td>@s.UpdatedAt.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<SystemSettingDto> Settings = [];
+    private string Key = "";
+    private string Value = "";
+    private string? Description;
+    private string? Error;
+
+    protected override async Task OnInitializedAsync() =>
+        Settings = (await SystemSettingService.ListAsync()).ToList();
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await SystemSettingService.UpsertAsync(Key, Value, Description);
+            Key = ""; Value = ""; Description = null;
+            Settings = (await SystemSettingService.ListAsync()).ToList();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}

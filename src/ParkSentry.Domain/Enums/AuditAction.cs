@@ -18,5 +18,9 @@ public enum AuditAction
     OrganizationSettingsChanged = 13,
     ManualOverride = 14,
     OrganizationCreated = 15,
-    SiteCreated = 16
+    SiteCreated = 16,
+    WatchlistUpdated = 17,
+    ScannerConfigurationChanged = 18,
+    DeviceRegistered = 19,
+    PaymentFailed = 20
 }

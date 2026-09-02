@@ -1,0 +1,53 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN")]
+@inject ParkSentry.Infrastructure.Services.UserAdminService UserAdminService
+@rendermode InteractiveServer
+
+<PageTitle>Users - ParkSentry</PageTitle>
+
+<h1>Users</h1>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <table>
+        <thead><tr><th>Email</th><th>Display name</th><th>Roles</th><th>Active</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var user in UserList)
+        {
+            <tr>
+                <td>@user.Email</td>
+                <td>@user.DisplayName</td>
+                <td>@string.Join(", ", user.Roles)</td>
+                <td>@(user.IsActive ? "Yes" : "No")</td>
+                <td>
+                    <button class="btn btn-outline btn-sm" @onclick="() => ToggleAsync(user)">
+                        @(user.IsActive ? "Disable" : "Enable")
+                    </button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<ParkSentry.Infrastructure.Services.UserAdminDto> UserList = [];
+    private string? Error;
+
+    protected override async Task OnInitializedAsync() =>
+        UserList = (await UserAdminService.ListAsync()).ToList();
+
+    private async Task ToggleAsync(ParkSentry.Infrastructure.Services.UserAdminDto user)
+    {
+        try
+        {
+            await UserAdminService.SetActiveAsync(user.Id, !user.IsActive);
+            UserList = (await UserAdminService.ListAsync()).ToList();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}

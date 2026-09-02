@@ -1,0 +1,42 @@
+@page "/admin/rates"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN")]
+@inject ParkingRateService ParkingRateService
+@rendermode InteractiveServer
+
+<PageTitle>Parking Rates - ParkSentry</PageTitle>
+
+<h1>Parking Rates</h1>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Model</th><th>Grace</th><th>Daily Max</th><th>Active</th></tr></thead>
+        <tbody>
+        @foreach (var rate in RateList)
+        {
+            <tr>
+                <td>@rate.Name</td>
+                <td>@rate.Model</td>
+                <td>@(rate.GracePeriodMinutes?.ToString() ?? "-")</td>
+                <td>@(rate.DailyMaximum?.ToString("0.00") ?? "-")</td>
+                <td>@(rate.IsActive ? "Yes" : "No")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<ParkingRateDto> RateList = [];
+    private string? Error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { RateList = (await ParkingRateService.ListAsync()).ToList(); }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}

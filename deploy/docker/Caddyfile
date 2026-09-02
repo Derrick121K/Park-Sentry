@@ -1,0 +1,16 @@
+{$PUBLIC_HOST:localhost} {
+	encode gzip
+
+	@api path /api/* /health* /swagger*
+	handle @api {
+		reverse_proxy api:8080
+	}
+
+	handle /hubs/* {
+		reverse_proxy web:8080
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}

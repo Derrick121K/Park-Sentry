@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-parksentry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-parksentry}
+    volumes:
+      - parksentry_pgdata:/var/lib/postgresql/data
+    networks:
+      - parksentry_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # Not published to the host by default — keep Postgres private.
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile.api
+    image: parksentry-api:${IMAGE_TAG:-v1.0.0-rc1}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-parksentry};Username=${POSTGRES_USER:-parksentry};Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?JWT_KEY is required}
+      Jwt__Issuer: ${JWT_ISSUER:-ParkSentry}
+      Jwt__Audience: ${JWT_AUDIENCE:-ParkSentry.Api}
+      Integrations__Mode: Production
+      Payments__Provider: ${PAYMENTS_PROVIDER:-Manual}
+      Scanning__Provider: ${SCANNING_PROVIDER:-Browser}
+      Scanning__RetainImages: "false"
+      Cors__AllowedOrigins__0: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+    networks:
+      - parksentry_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile.web
+    image: parksentry-web:${IMAGE_TAG:-v1.0.0-rc1}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-parksentry};Username=${POSTGRES_USER:-parksentry};Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY}
+      Integrations__Mode: Production
+      Payments__Provider: ${PAYMENTS_PROVIDER:-Manual}
+      Scanning__Provider: ${SCANNING_PROVIDER:-Browser}
+      Scanning__RetainImages: "false"
+    networks:
+      - parksentry_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - parksentry_internal
+
+networks:
+  parksentry_internal:
+    driver: bridge
+
+volumes:
+  parksentry_pgdata:
+  caddy_data:
+  caddy_config:

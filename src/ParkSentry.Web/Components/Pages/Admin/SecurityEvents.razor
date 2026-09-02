@@ -1,0 +1,55 @@
+@page "/admin/security-events"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
+@inject SecurityEventService SecurityEventService
+@rendermode InteractiveServer
+
+<PageTitle>Security Events - ParkSentry</PageTitle>
+
+<h1>Security Events</h1>
+
+@if (!string.IsNullOrEmpty(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+<div class="card">
+    <table>
+        <thead><tr><th>When (UTC)</th><th>Type</th><th>Severity</th><th>Status</th><th>Description</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in Items)
+        {
+            <tr>
+                <td>@item.CreatedAt.ToString("u")</td>
+                <td>@item.EventType</td>
+                <td>@item.Severity</td>
+                <td>@item.Status</td>
+                <td>@item.Description</td>
+                <td>
+                    @if (item.Status != SecurityEventStatus.Resolved)
+                    {
+                        <button class="btn btn-outline btn-sm" @onclick="() => ResolveAsync(item.Id)">Resolve</button>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<SecurityEventDto> Items = [];
+    private string? Error;
+
+    protected override async Task OnInitializedAsync() =>
+        Items = (await SecurityEventService.ListAsync()).ToList();
+
+    private async Task ResolveAsync(Guid id)
+    {
+        try
+        {
+            await SecurityEventService.ResolveAsync(id, "Resolved by operator");
+            Items = (await SecurityEventService.ListAsync()).ToList();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+}
