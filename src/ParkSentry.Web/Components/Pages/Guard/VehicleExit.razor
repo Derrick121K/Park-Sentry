@@ -1,0 +1,103 @@
+@page "/guard/exit"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@inject ParkingSessionService SessionService
+@inject ILicenceDiscScanner Scanner
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Vehicle Exit - ParkSentry</PageTitle>
+
+<ConnectionStatus />
+
+<div class="demo-banner">MOCK PAYMENT PROVIDER — Development payments only</div>
+
+<h1>Vehicle Exit</h1>
+
+<div class="card">
+    <div class="form-group">
+        <label>Registration Number</label>
+        <input class="form-control" @bind="Registration" style="font-size:1.2rem;text-transform:uppercase" />
+        <button class="btn btn-secondary btn-sm" style="margin-top:0.5rem" @onclick="FindSession" disabled="@(!IsOnline)">Find Active Session</button>
+    </div>
+
+    @if (ActiveSession is not null)
+    {
+        <div class="alert alert-info">
+            <strong>@ActiveSession.RegistrationNumber</strong> — @ActiveSession.SiteName<br/>
+            Entry: @ActiveSession.EntryTime.ToLocalTime().ToString("g")<br/>
+            Bay: @(ActiveSession.BayNumber ?? "None")<br/>
+            Outstanding: R@ActiveSession.OutstandingBalance.ToString("N2")
+        </div>
+
+        <button class="btn btn-primary btn-lg btn-block" @onclick="ProcessExit" disabled="@(Processing || !IsOnline)">
+            @(Processing ? "Processing..." : "Process Exit & Mock Payment")
+        </button>
+    }
+
+    @if (!IsOnline)
+    {
+        <div class="alert alert-warning">Exit and payment are unavailable while offline.</div>
+    }
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="alert alert-@(IsError ? "danger" : "success") mt-2">@Message</div>
+    }
+</div>
+
+@code {
+    private string Registration = "", Message = "";
+    private ParkingSessionDto? ActiveSession;
+    private bool Processing, IsError, IsOnline = true;
+    private string? _idempotencyKey;
+    private DotNetObjectReference<VehicleExit>? _onlineRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _onlineRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("ParkSentryPwa.subscribeOnlineStatus", _onlineRef);
+        IsOnline = await JS.InvokeAsync<bool>("ParkSentryPwa.isOnline");
+        StateHasChanged();
+    }
+
+    private async Task FindSession()
+    {
+        var scan = Scanner.ParseManualInput(Registration);
+        if (!scan.Success) { Message = scan.ErrorMessage ?? "Invalid registration"; IsError = true; return; }
+
+        var sessions = await SessionService.GetActiveSessionsAsync();
+        ActiveSession = sessions.FirstOrDefault(s =>
+            s.RegistrationNumber.Equals(scan.RegistrationNumber, StringComparison.OrdinalIgnoreCase));
+        if (ActiveSession is null) { Message = "No active session found."; IsError = true; }
+        else { Message = ""; IsError = false; _idempotencyKey = $"exit-{ActiveSession.Id}-{Guid.NewGuid():N}"; }
+    }
+
+    private async Task ProcessExit()
+    {
+        if (ActiveSession is null || !IsOnline) return;
+        Processing = true;
+        try
+        {
+            var result = await SessionService.ProcessExitAsync(
+                new VehicleExitRequest(ActiveSession.Id, true, _idempotencyKey));
+            Message = $"Exit complete. Total: R{result.TotalAmount:N2}. Receipt: {result.ReceiptNumber ?? "N/A"}";
+            IsError = false;
+            ActiveSession = null;
+            Registration = "";
+            _idempotencyKey = null;
+        }
+        catch (Exception ex) { Message = ex.Message; IsError = true; }
+        finally { Processing = false; }
+    }
+
+    [JSInvokable] public void OnOnline() { IsOnline = true; StateHasChanged(); }
+    [JSInvokable] public void OnOffline() { IsOnline = false; StateHasChanged(); }
+
+    public async ValueTask DisposeAsync()
+    {
+        await JS.InvokeVoidAsync("ParkSentryPwa.unsubscribeOnlineStatus");
+        _onlineRef?.Dispose();
+    }
+}

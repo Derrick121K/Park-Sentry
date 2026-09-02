@@ -1,0 +1,36 @@
+@page "/login"
+@layout EmptyLayout
+
+<div class="login-page">
+    <div class="login-card">
+        <img src="/parksentrylogo.png" alt="ParkSentry" />
+        <h2 style="text-align:center">ParkSentry</h2>
+        <p style="text-align:center;color:#666;margin-bottom:1.5rem">Scan. Park. Pay. Secure.</p>
+
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="alert alert-danger">@Error</div>
+        }
+
+        <form method="post" action="/account/login">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" class="form-control" required placeholder="guard@demo.parksentry.dev" />
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" class="form-control" required />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+        </form>
+
+        <details style="margin-top:1.5rem;font-size:0.8rem;color:#888">
+            <summary>Development credentials</summary>
+            <p>superadmin@parksentry.dev<br/>orgadmin@demo.parksentry.dev<br/>guard@demo.parksentry.dev<br/>Password: Dev@ParkSentry1!</p>
+        </details>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+}

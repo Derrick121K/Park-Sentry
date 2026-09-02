@@ -1,0 +1,33 @@
+@page "/admin/sites"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
+@inject SiteService SiteService
+@rendermode InteractiveServer
+
+<PageTitle>Sites - ParkSentry</PageTitle>
+
+<h1>Parking Sites</h1>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Address</th><th>Total Bays</th><th>Available</th><th>Occupied</th><th>Status</th></tr></thead>
+        <tbody>
+            @foreach (var site in SiteList)
+            {
+                <tr>
+                    <td>@site.Name</td>
+                    <td>@(site.Address ?? "-")</td>
+                    <td>@site.TotalBays</td>
+                    <td>@site.AvailableBays</td>
+                    <td>@site.OccupiedBays</td>
+                    <td><span class="badge @(site.IsActive ? "badge-success" : "badge-danger")">@(site.IsActive ? "Active" : "Inactive")</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<SiteDto> SiteList = [];
+    protected override async Task OnInitializedAsync() =>
+        SiteList = (await SiteService.GetSitesAsync()).ToList();
+}

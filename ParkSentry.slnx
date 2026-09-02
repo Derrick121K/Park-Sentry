@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ParkSentry.Api/ParkSentry.Api.csproj" />
+    <Project Path="src/ParkSentry.Application/ParkSentry.Application.csproj" />
+    <Project Path="src/ParkSentry.Domain/ParkSentry.Domain.csproj" />
+    <Project Path="src/ParkSentry.Infrastructure/ParkSentry.Infrastructure.csproj" />
+    <Project Path="src/ParkSentry.Web/ParkSentry.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ParkSentry.IntegrationTests/ParkSentry.IntegrationTests.csproj" />
+    <Project Path="tests/ParkSentry.UnitTests/ParkSentry.UnitTests.csproj" />
+  </Folder>
+</Solution>

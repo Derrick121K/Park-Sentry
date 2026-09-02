@@ -1,0 +1,57 @@
+@page "/sessions"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@inject ParkingSessionService SessionService
+@rendermode InteractiveServer
+
+<PageTitle>Sessions - ParkSentry</PageTitle>
+
+<h1>Parking Sessions</h1>
+
+<h3>Active Sessions</h3>
+<div class="card">
+    <table>
+        <thead><tr><th>Registration</th><th>Site</th><th>Bay</th><th>Entry</th><th>Status</th></tr></thead>
+        <tbody>
+            @foreach (var s in ActiveSessions)
+            {
+                <tr>
+                    <td>@s.RegistrationNumber</td>
+                    <td>@s.SiteName</td>
+                    <td>@(s.BayNumber ?? "-")</td>
+                    <td>@s.EntryTime.ToLocalTime().ToString("g")</td>
+                    <td><span class="badge badge-warning">@s.Status</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<h3>History</h3>
+<div class="card">
+    <table>
+        <thead><tr><th>Registration</th><th>Site</th><th>Entry</th><th>Exit</th><th>Status</th></tr></thead>
+        <tbody>
+            @foreach (var s in History)
+            {
+                <tr>
+                    <td>@s.RegistrationNumber</td>
+                    <td>@s.SiteName</td>
+                    <td>@s.EntryTime.ToLocalTime().ToString("g")</td>
+                    <td>@(s.ExitTime?.ToLocalTime().ToString("g") ?? "-")</td>
+                    <td><span class="badge @(s.Status == SessionStatus.Completed ? "badge-success" : "badge-warning")">@s.Status</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<ParkingSessionDto> ActiveSessions = [];
+    private List<SessionSummaryDto> History = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        ActiveSessions = (await SessionService.GetActiveSessionsAsync()).ToList();
+        History = (await SessionService.GetHistoryAsync()).ToList();
+    }
+}

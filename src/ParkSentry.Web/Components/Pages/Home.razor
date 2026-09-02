@@ -1,0 +1,55 @@
+﻿@page "/"
+@attribute [Authorize(Policy = "OperationalStaff")]
+@inject DashboardService DashboardService
+@inject ITenantContext TenantContext
+@inject ParkingRealtimeService RealtimeService
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard - ParkSentry</PageTitle>
+
+<ConnectionStatus RealtimeConnected="@RealtimeService.IsConnected" />
+
+<h1>Parking Overview</h1>
+
+@if (Stats is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card"><div class="value">@Stats.TotalBays</div><div class="label">Total Bays</div></div>
+        <div class="stat-card"><div class="value">@Stats.AvailableBays</div><div class="label">Available</div></div>
+        <div class="stat-card"><div class="value">@Stats.OccupiedBays</div><div class="label">Occupied</div></div>
+        <div class="stat-card"><div class="value">@Stats.ReservedBays</div><div class="label">Reserved</div></div>
+        <div class="stat-card"><div class="value">@Stats.CurrentVehicles</div><div class="label">Current Vehicles</div></div>
+        <div class="stat-card"><div class="value">@Stats.TodayEntries</div><div class="label">Today's Entries</div></div>
+        <div class="stat-card"><div class="value">@Stats.TodayExits</div><div class="label">Today's Exits</div></div>
+        <div class="stat-card"><div class="value">R@Stats.TodayRevenue.ToString("N0")</div><div class="label">Today's Revenue</div></div>
+    </div>
+}
+
+@code {
+    private DashboardStatsDto? Stats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshStats();
+        if (TenantContext.OrganizationId.HasValue)
+        {
+            RealtimeService.ParkingUpdateReceived += OnParkingUpdate;
+            await RealtimeService.ConnectAsync(TenantContext.OrganizationId.Value);
+        }
+    }
+
+    private async Task OnParkingUpdate(string eventType, object data) => await RefreshStats();
+
+    private async Task RefreshStats() => Stats = await DashboardService.GetStatsAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        RealtimeService.ParkingUpdateReceived -= OnParkingUpdate;
+        await RealtimeService.DisposeAsync();
+    }
+}

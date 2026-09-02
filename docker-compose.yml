@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parksentry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parksentry
+      POSTGRES_PASSWORD: parksentry_dev
+      POSTGRES_DB: parksentry
+    ports:
+      - "5432:5432"
+    volumes:
+      - parksentry_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parksentry -d parksentry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  parksentry_pgdata:

@@ -1,0 +1,70 @@
+@page "/vehicles"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@inject VehicleService VehicleService
+@rendermode InteractiveServer
+
+<PageTitle>Vehicles - ParkSentry</PageTitle>
+
+<h1>Vehicles</h1>
+
+<div class="card">
+    <h3>Register Vehicle</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="form-group">
+            <label>Registration *</label>
+            <input class="form-control" @bind="Reg" />
+        </div>
+        <div class="form-group">
+            <label>Make</label>
+            <input class="form-control" @bind="Make" />
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <input class="form-control" @bind="Model" />
+        </div>
+        <div class="form-group">
+            <label>Colour</label>
+            <input class="form-control" @bind="Colour" />
+        </div>
+    </div>
+    <button class="btn btn-primary" @onclick="Register">Register</button>
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-@(IsError ? "danger" : "success") mt-2">@Message</div> }
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Registration</th><th>Make</th><th>Model</th><th>Colour</th><th>Type</th></tr></thead>
+        <tbody>
+            @foreach (var v in VehicleList)
+            {
+                <tr><td>@v.RegistrationNumber</td><td>@(v.VehicleMake ?? "-")</td><td>@(v.VehicleModel ?? "-")</td><td>@(v.VehicleColour ?? "-")</td><td>@v.VehicleType</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<VehicleDto> VehicleList = [];
+    private string Reg = "", Make = "", Model = "", Colour = "", Message = "";
+    private bool IsError;
+
+    protected override async Task OnInitializedAsync() =>
+        VehicleList = (await VehicleService.GetAllAsync()).ToList();
+
+    private async Task Register()
+    {
+        try
+        {
+            await VehicleService.CreateAsync(new CreateVehicleRequest(Reg, Make, Model, Colour));
+            Message = "Vehicle registered.";
+            IsError = false;
+            Reg = Make = Model = Colour = "";
+            VehicleList = (await VehicleService.GetAllAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            IsError = true;
+        }
+    }
+}

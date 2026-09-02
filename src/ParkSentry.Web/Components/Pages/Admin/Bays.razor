@@ -1,0 +1,62 @@
+@page "/admin/bays"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
+@inject SiteService SiteService
+@inject ParkingBayService BayService
+@rendermode InteractiveServer
+
+<PageTitle>Parking Bays - ParkSentry</PageTitle>
+
+<h1>Parking Bays</h1>
+
+<div class="form-group" style="max-width:300px">
+    <label>Select Site</label>
+    <select class="form-control" @bind="SelectedSiteId" @bind:after="LoadBays">
+        @foreach (var site in SiteList)
+        {
+            <option value="@site.Id">@site.Name</option>
+        }
+    </select>
+</div>
+
+@if (BayList.Count > 0)
+{
+    <div class="card">
+        <table>
+            <thead><tr><th>Bay</th><th>Zone</th><th>Type</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach (var bay in BayList)
+                {
+                    <tr>
+                        <td>@bay.BayNumber</td>
+                        <td>@bay.ZoneName</td>
+                        <td>@bay.Type</td>
+                        <td>
+                            <span class="badge @(bay.Status == BayStatus.Available ? "badge-success" : bay.Status == BayStatus.Occupied ? "badge-danger" : "badge-warning")">
+                                @bay.Status
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<SiteDto> SiteList = [];
+    private List<ParkingBayDto> BayList = [];
+    private Guid SelectedSiteId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SiteList = (await SiteService.GetSitesAsync()).ToList();
+        if (SiteList.Count > 0)
+        {
+            SelectedSiteId = SiteList[0].Id;
+            await LoadBays();
+        }
+    }
+
+    private async Task LoadBays() =>
+        BayList = (await BayService.GetBaysBySiteAsync(SelectedSiteId)).ToList();
+}

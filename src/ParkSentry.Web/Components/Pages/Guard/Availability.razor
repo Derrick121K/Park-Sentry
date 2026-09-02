@@ -1,0 +1,85 @@
+@page "/guard/availability"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@inject SiteService SiteService
+@inject ParkingBayService BayService
+@inject ITenantContext TenantContext
+@inject ParkingRealtimeService RealtimeService
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Parking Availability - ParkSentry</PageTitle>
+
+<ConnectionStatus RealtimeConnected="@RealtimeService.IsConnected" />
+
+<h1>Parking Availability</h1>
+
+<div class="form-group" style="max-width:300px">
+    <label>Site</label>
+    <select class="form-control" @bind="SiteId" @bind:after="LoadBays">
+        @foreach (var site in Sites)
+        {
+            <option value="@site.Id">@site.Name (@site.AvailableBays available / @site.TotalBays total)</option>
+        }
+    </select>
+</div>
+
+<div class="bay-legend">
+    <span class="legend-item available">Available</span>
+    <span class="legend-item occupied">Occupied</span>
+    <span class="legend-item reserved">Reserved</span>
+    <span class="legend-item maintenance">Maintenance</span>
+    <span class="legend-item disabled">Disabled</span>
+</div>
+
+<div class="bay-grid">
+    @foreach (var bay in Bays)
+    {
+        <div class="bay-tile @GetBayClass(bay.Status)">
+            <span class="bay-number">@bay.BayNumber</span>
+            <span class="bay-status">@bay.Status</span>
+        </div>
+    }
+</div>
+
+@code {
+    private List<SiteDto> Sites = [];
+    private List<ParkingBayDto> Bays = [];
+    private Guid SiteId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sites = (await SiteService.GetSitesAsync()).ToList();
+        if (Sites.Count > 0) { SiteId = Sites[0].Id; await LoadBays(); }
+
+        if (TenantContext.OrganizationId.HasValue)
+        {
+            RealtimeService.ParkingUpdateReceived += OnParkingUpdate;
+            await RealtimeService.ConnectAsync(TenantContext.OrganizationId.Value);
+        }
+    }
+
+    private async Task OnParkingUpdate(string eventType, object data)
+    {
+        if (eventType is "entry" or "exit" or "bay")
+            await LoadBays();
+    }
+
+    private async Task LoadBays() =>
+        Bays = (await BayService.GetBaysBySiteAsync(SiteId)).ToList();
+
+    private static string GetBayClass(BayStatus status) => status switch
+    {
+        BayStatus.Available => "available",
+        BayStatus.Occupied => "occupied",
+        BayStatus.Reserved => "reserved",
+        BayStatus.Maintenance => "maintenance",
+        BayStatus.Disabled => "disabled",
+        _ => "unknown"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        RealtimeService.ParkingUpdateReceived -= OnParkingUpdate;
+        await RealtimeService.DisposeAsync();
+    }
+}

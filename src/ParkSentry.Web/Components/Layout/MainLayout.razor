@@ -1,0 +1,60 @@
+﻿@inherits LayoutComponentBase
+@using System.Security.Claims
+@inject NavigationManager Navigation
+
+<div class="app-shell">
+    @if (ShowNav)
+    {
+        <nav class="sidebar">
+            <div class="brand">
+                <img src="/parksentrylogo.png" alt="ParkSentry" class="brand-logo" />
+                <div>
+                    <strong>ParkSentry</strong>
+                    <small>Scan. Park. Pay. Secure.</small>
+                </div>
+            </div>
+            <div class="nav-links">
+                <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+                <AuthorizeView Roles="SUPER_ADMIN">
+                    <NavLink href="/admin/organizations">Organizations</NavLink>
+                </AuthorizeView>
+                <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER">
+                    <NavLink href="/admin/sites">Sites</NavLink>
+                    <NavLink href="/admin/bays">Parking Bays</NavLink>
+                </AuthorizeView>
+                <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT">
+                    <NavLink href="/guard">Guard Ops</NavLink>
+                    <NavLink href="/vehicles">Vehicles</NavLink>
+                    <NavLink href="/sessions">Sessions</NavLink>
+                </AuthorizeView>
+                <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
+                    <NavLink href="/audit">Audit Log</NavLink>
+                </AuthorizeView>
+            </div>
+            <div class="nav-footer">
+                <AuthorizeView>
+                    <Authorized>
+                        <span class="user-info">@context.User.Identity?.Name</span>
+                        <form method="post" action="/account/logout">
+                            <button type="submit" class="btn btn-outline btn-sm">Logout</button>
+                        </form>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </nav>
+    }
+    <main class="main-content @(ShowNav ? "" : "full-width")">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool ShowNav => !Navigation.Uri.Contains("/login", StringComparison.OrdinalIgnoreCase)
+                         && !Navigation.Uri.Contains("/access-denied", StringComparison.OrdinalIgnoreCase);
+}

@@ -1,0 +1,111 @@
+@inject ICameraScannerInterop CameraInterop
+@implements IAsyncDisposable
+
+<div class="camera-scanner">
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-warning">@ErrorMessage</div>
+    }
+
+    @if (State == CameraState.Idle || State == CameraState.PermissionRequired)
+    {
+        <p class="camera-hint">Position the licence disc inside the scanning area. Camera access requires HTTPS on mobile devices.</p>
+        <button class="btn btn-secondary btn-lg btn-block" @onclick="StartCamera" disabled="@Loading">
+            @(Loading ? "Starting camera..." : "Scan with camera")
+        </button>
+    }
+
+    @if (State is CameraState.Active or CameraState.Scanning)
+    {
+        <div class="camera-viewport">
+            <video @ref="_videoElement" autoplay playsinline muted class="camera-video"></video>
+            <div class="camera-overlay">Position licence disc here</div>
+        </div>
+        <div class="camera-actions">
+            <button class="btn btn-outline" @onclick="SwitchCamera" disabled="@Loading">Switch camera</button>
+            <button class="btn btn-primary btn-lg" @onclick="Capture" disabled="@(Loading || State == CameraState.Scanning)">
+                @(State == CameraState.Scanning ? "Scanning..." : "Capture / Scan")
+            </button>
+            <button class="btn btn-outline" @onclick="StopCamera">Cancel</button>
+        </div>
+    }
+</div>
+
+@code {
+    private ElementReference _videoElement;
+    private CameraState State = CameraState.Idle;
+    private bool Loading;
+    private string? ErrorMessage;
+
+    [Parameter] public EventCallback<ScanResult> OnScanComplete { get; set; }
+    [Parameter] public ILicenceDiscScanner Scanner { get; set; } = default!;
+
+    private enum CameraState { Idle, PermissionRequired, Active, Scanning }
+
+    private async Task StartCamera()
+    {
+        Loading = true;
+        ErrorMessage = null;
+        try
+        {
+            if (!await CameraInterop.IsSecureContextAsync())
+            {
+                ErrorMessage = "Camera access requires a secure connection (HTTPS). Please enter the registration manually.";
+                State = CameraState.PermissionRequired;
+                return;
+            }
+
+            if (!await CameraInterop.HasMediaDevicesAsync())
+            {
+                ErrorMessage = "Camera access is not supported in this browser. Please enter the registration manually.";
+                return;
+            }
+
+            State = CameraState.Active;
+            await InvokeAsync(StateHasChanged);
+            await CameraInterop.StartCameraAsync(_videoElement);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            State = CameraState.Idle;
+        }
+        finally { Loading = false; }
+    }
+
+    private async Task SwitchCamera()
+    {
+        Loading = true;
+        try { await CameraInterop.SwitchCameraAsync(); }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { Loading = false; }
+    }
+
+    private async Task StopCamera()
+    {
+        await CameraInterop.StopCameraAsync();
+        State = CameraState.Idle;
+        ErrorMessage = null;
+    }
+
+    private async Task Capture()
+    {
+        State = CameraState.Scanning;
+        Loading = true;
+        try
+        {
+            var result = await Scanner.ScanAsync();
+            await CameraInterop.StopCameraAsync();
+            State = CameraState.Idle;
+            await OnScanComplete.InvokeAsync(result);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            State = CameraState.Active;
+        }
+        finally { Loading = false; }
+    }
+
+    public async ValueTask DisposeAsync() => await CameraInterop.CleanupAsync();
+}

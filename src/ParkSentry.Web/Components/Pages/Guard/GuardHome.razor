@@ -1,0 +1,14 @@
+@page "/guard"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@rendermode InteractiveServer
+
+<PageTitle>Guard Operations - ParkSentry</PageTitle>
+
+<h1>Guard Operations</h1>
+
+<div class="guard-grid">
+    <a href="/guard/scan" class="btn btn-primary guard-btn">Scan Vehicle</a>
+    <a href="/guard/exit" class="btn btn-secondary guard-btn">Vehicle Exit</a>
+    <a href="/sessions" class="btn btn-primary guard-btn">Current Vehicles</a>
+    <a href="/guard/availability" class="btn btn-secondary guard-btn">Parking Availability</a>
+</div>

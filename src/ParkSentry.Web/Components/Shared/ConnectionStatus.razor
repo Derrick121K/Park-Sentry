@@ -1,0 +1,45 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="connection-status @StatusClass" role="status" aria-live="polite">
+    <span class="connection-dot"></span>
+    <span>@StatusText</span>
+    @if (!IsOnline)
+    {
+        <span class="connection-hint">Server operations unavailable while offline.</span>
+    }
+</div>
+
+@code {
+    private bool IsOnline = true;
+    private DotNetObjectReference<ConnectionStatus>? _dotNetRef;
+
+    [Parameter] public bool RealtimeConnected { get; set; }
+
+    private string StatusClass => !IsOnline ? "offline" : RealtimeConnected ? "online-live" : "online";
+    private string StatusText => !IsOnline ? "OFFLINE" : RealtimeConnected ? "ONLINE — LIVE" : "ONLINE";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("ParkSentryPwa.subscribeOnlineStatus", _dotNetRef);
+        IsOnline = await JS.InvokeAsync<bool>("ParkSentryPwa.isOnline");
+        StateHasChanged();
+    }
+
+    protected override void OnParametersSet() { }
+
+    [JSInvokable]
+    public void OnOnline() { IsOnline = true; StateHasChanged(); }
+
+    [JSInvokable]
+    public void OnOffline() { IsOnline = false; StateHasChanged(); }
+
+    public async ValueTask DisposeAsync()
+    {
+        await JS.InvokeVoidAsync("ParkSentryPwa.unsubscribeOnlineStatus");
+        _dotNetRef?.Dispose();
+    }
+}

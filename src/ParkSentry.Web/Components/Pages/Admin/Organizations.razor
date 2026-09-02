@@ -1,0 +1,60 @@
+@page "/admin/organizations"
+@attribute [Authorize(Roles = "SUPER_ADMIN")]
+@inject OrganizationService OrganizationService
+@rendermode InteractiveServer
+
+<PageTitle>Organizations - ParkSentry</PageTitle>
+
+<h1>Organizations</h1>
+
+<div class="card">
+    <h3>Create Organization</h3>
+    <div class="form-group">
+        <label>Name</label>
+        <input class="form-control" @bind="NewName" />
+    </div>
+    <div class="form-group">
+        <label>Display Name</label>
+        <input class="form-control" @bind="NewDisplayName" />
+    </div>
+    <div class="form-group">
+        <label>Contact Email</label>
+        <input class="form-control" @bind="NewEmail" />
+    </div>
+    <button class="btn btn-primary" @onclick="CreateOrg">Create</button>
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success mt-2">@Message</div> }
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Display Name</th><th>Currency</th><th>Status</th></tr></thead>
+        <tbody>
+            @foreach (var org in OrgList)
+            {
+                <tr>
+                    <td>@org.Name</td>
+                    <td>@org.DisplayName</td>
+                    <td>@org.Currency</td>
+                    <td><span class="badge @(org.IsActive ? "badge-success" : "badge-danger")">@(org.IsActive ? "Active" : "Inactive")</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<OrganizationDto> OrgList = [];
+    private string NewName = "", NewDisplayName = "", NewEmail = "", Message = "";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => OrgList = (await OrganizationService.GetAllAsync()).ToList();
+
+    private async Task CreateOrg()
+    {
+        await OrganizationService.CreateAsync(new CreateOrganizationRequest(NewName, NewDisplayName, NewEmail));
+        Message = "Organization created.";
+        NewName = NewDisplayName = NewEmail = "";
+        await Load();
+    }
+}

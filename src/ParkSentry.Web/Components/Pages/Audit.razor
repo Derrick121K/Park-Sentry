@@ -1,0 +1,32 @@
+@page "/audit"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN")]
+@inject DashboardService DashboardService
+@rendermode InteractiveServer
+
+<PageTitle>Audit Log - ParkSentry</PageTitle>
+
+<h1>Audit Log</h1>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>
+        <tbody>
+            @foreach (var log in Logs)
+            {
+                <tr>
+                    <td>@log.CreatedAt.ToLocalTime().ToString("g")</td>
+                    <td>@(log.UserId ?? "System")</td>
+                    <td>@log.Action</td>
+                    <td>@log.EntityType @(log.EntityId != null ? $"({log.EntityId[..Math.Min(8, log.EntityId.Length)]}...)" : "")</td>
+                    <td>@(log.Details ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<AuditLogDto> Logs = [];
+    protected override async Task OnInitializedAsync() =>
+        Logs = (await DashboardService.GetAuditLogsAsync()).ToList();
+}

@@ -1,0 +1,244 @@
+@page "/guard/scan"
+@attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER,SECURITY_GUARD,PARKING_ATTENDANT")]
+@implements IAsyncDisposable
+@inject SiteService SiteService
+@inject ParkingBayService BayService
+@inject ParkingSessionService SessionService
+@inject VehicleService VehicleService
+@inject ITenantContext TenantContext
+@inject ILicenceDiscScanner Scanner
+@inject ParkingRealtimeService RealtimeService
+@using ParkSentry.Application.Interfaces.Scanning
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>Scan Vehicle - ParkSentry</PageTitle>
+
+<div class="scan-page">
+    <ConnectionStatus RealtimeConnected="@RealtimeService.IsConnected" />
+
+    <div class="scan-header">
+        <h1 class="scan-title">PARKSENTRY</h1>
+        <h2 class="scan-subtitle">SCAN VEHICLE</h2>
+    </div>
+
+    <div class="demo-banner">DEMO SCANNER — Camera preview available; OCR not yet implemented</div>
+
+    @if (Step == ScanStep.Scan)
+    {
+        <div class="card scan-card">
+            <CameraScanner Scanner="Scanner" OnScanComplete="HandleScanComplete" />
+
+            <div class="scan-divider"><span>OR</span></div>
+
+            <div class="manual-entry">
+                <label>Enter registration manually</label>
+                <input class="form-control scan-reg-input" @bind="Registration" placeholder="e.g. CA 123-456" inputmode="text" autocomplete="off" />
+                <button class="btn btn-primary btn-lg btn-block" @onclick="ProcessManualScan" disabled="@Processing || !IsOnline">
+                    Continue
+                </button>
+            </div>
+        </div>
+    }
+
+    @if (Step == ScanStep.VehicleStatus)
+    {
+        <div class="card scan-card">
+            <h3>Vehicle found: <strong>@DisplayRegistration</strong></h3>
+            <p class="vehicle-status status-@StatusClass">Status: @VehicleStatus</p>
+            @if (!string.IsNullOrEmpty(WatchlistMessage))
+            {
+                <div class="alert alert-warning">@WatchlistMessage</div>
+            }
+
+            <div class="form-group">
+                <label>Site</label>
+                <select class="form-control" @bind="SiteId" @bind:after="LoadBays">
+                    @foreach (var site in Sites)
+                    {
+                        <option value="@site.Id">@site.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Parking Bay (optional)</label>
+                <select class="form-control" @bind="BayId">
+                    <option value="">No bay</option>
+                    @foreach (var bay in AvailableBays)
+                    {
+                        <option value="@bay.Id">@bay.BayNumber</option>
+                    }
+                </select>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                <div class="form-group"><label>Make</label><input class="form-control" @bind="Make" /></div>
+                <div class="form-group"><label>Model</label><input class="form-control" @bind="Model" /></div>
+            </div>
+
+            <button class="btn btn-primary btn-lg btn-block" @onclick="ProcessEntry" disabled="@(Processing || !IsOnline || Blocked)">
+                @(Processing ? "Processing..." : "Continue to entry")
+            </button>
+            <button class="btn btn-outline btn-block" style="margin-top:0.5rem" @onclick="ResetScan">Scan another vehicle</button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="alert alert-@(IsError ? "danger" : "success")">@Message</div>
+    }
+
+    @if (!IsOnline)
+    {
+        <div class="alert alert-warning">You are offline. Entry cannot be recorded until connection is restored.</div>
+    }
+</div>
+
+@code {
+    private enum ScanStep { Scan, VehicleStatus }
+
+    private List<SiteDto> Sites = [];
+    private List<ParkingBayDto> AvailableBays = [];
+    private ScanStep Step = ScanStep.Scan;
+    private Guid SiteId;
+    private Guid? BayId;
+    private string Registration = "", Make = "", Model = "", Message = "";
+    private string DisplayRegistration = "", VehicleStatus = "UNKNOWN", StatusClass = "unknown";
+    private string? WatchlistMessage;
+    private bool Processing, IsError, Blocked, IsOnline = true;
+    private DotNetObjectReference<ScanVehicle>? _onlineRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sites = (await SiteService.GetSitesAsync()).ToList();
+        if (Sites.Count > 0) { SiteId = Sites[0].Id; await LoadBays(); }
+
+        if (TenantContext.OrganizationId.HasValue)
+        {
+            RealtimeService.ParkingUpdateReceived += OnRealtimeUpdate;
+            await RealtimeService.ConnectAsync(TenantContext.OrganizationId.Value);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _onlineRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("ParkSentryPwa.subscribeOnlineStatus", _onlineRef);
+        IsOnline = await JS.InvokeAsync<bool>("ParkSentryPwa.isOnline");
+        StateHasChanged();
+    }
+
+    private async Task HandleScanComplete(ScanResult result)
+    {
+        if (!result.Success)
+        {
+            Message = result.ErrorMessage ?? "Scan failed. Please enter the registration manually.";
+            IsError = true;
+            return;
+        }
+
+        await ApplyScanResult(result);
+    }
+
+    private async Task ProcessManualScan()
+    {
+        var result = Scanner.ParseManualInput(Registration);
+        if (!result.Success)
+        {
+            Message = result.ErrorMessage ?? "Invalid registration";
+            IsError = true;
+            return;
+        }
+        await ApplyScanResult(result);
+    }
+
+    private async Task ApplyScanResult(ScanResult result)
+    {
+        Message = "";
+        IsError = false;
+        DisplayRegistration = result.RegistrationNumber!;
+        Registration = result.RegistrationNumber!;
+
+        var search = await VehicleService.SearchAsync(result.RegistrationNumber!);
+        if (search.BlockEntry)
+        {
+            VehicleStatus = "BLOCKED";
+            StatusClass = "blocked";
+            WatchlistMessage = search.WatchlistReason;
+            Blocked = true;
+        }
+        else if (search.IsWatchlisted)
+        {
+            VehicleStatus = "WATCHLIST";
+            StatusClass = "watchlist";
+            WatchlistMessage = search.WatchlistReason;
+            Blocked = false;
+        }
+        else if (search.Vehicle is not null)
+        {
+            VehicleStatus = "AUTHORIZED";
+            StatusClass = "authorized";
+            Blocked = false;
+        }
+        else
+        {
+            VehicleStatus = "UNKNOWN";
+            StatusClass = "unknown";
+            Blocked = false;
+        }
+
+        Step = ScanStep.VehicleStatus;
+    }
+
+    private async Task ProcessEntry()
+    {
+        if (!IsOnline) { Message = "Cannot record entry while offline."; IsError = true; return; }
+        Processing = true;
+        Message = "";
+        try
+        {
+            var scan = Scanner.ParseManualInput(Registration);
+            var result = await SessionService.ProcessEntryAsync(new VehicleEntryRequest(
+                SiteId, scan.RegistrationNumber!, Make, Model, null, BayId, null));
+
+            Message = $"Entry recorded for {result.RegistrationNumber}" + (result.BayNumber != null ? $" — Bay {result.BayNumber}" : "");
+            IsError = false;
+            ResetScan();
+            await LoadBays();
+        }
+        catch (Exception ex) { Message = ex.Message; IsError = true; }
+        finally { Processing = false; }
+    }
+
+    private void ResetScan()
+    {
+        Step = ScanStep.Scan;
+        Registration = Make = Model = "";
+        DisplayRegistration = "";
+        VehicleStatus = "UNKNOWN";
+        WatchlistMessage = null;
+        Blocked = false;
+        BayId = null;
+    }
+
+    private async Task LoadBays()
+    {
+        var bays = await BayService.GetBaysBySiteAsync(SiteId);
+        AvailableBays = bays.Where(b => b.Status == BayStatus.Available).ToList();
+    }
+
+    private Task OnRealtimeUpdate(string eventType, object data) => InvokeAsync(StateHasChanged);
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    [JSInvokable] public void OnOnline() { IsOnline = true; StateHasChanged(); }
+    [JSInvokable] public void OnOffline() { IsOnline = false; StateHasChanged(); }
+
+    public async ValueTask DisposeAsync()
+    {
+        RealtimeService.ParkingUpdateReceived -= OnRealtimeUpdate;
+        await JS.InvokeVoidAsync("ParkSentryPwa.unsubscribeOnlineStatus");
+        _onlineRef?.Dispose();
+    }
+}
