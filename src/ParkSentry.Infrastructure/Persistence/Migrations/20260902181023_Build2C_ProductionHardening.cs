@@ -10,17 +10,10 @@ namespace ParkSentry.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_ScannerConfigurations_OrganizationId",
-                table: "ScannerConfigurations");
-
-            migrationBuilder.DropIndex(
-                name: "IX_ParkingRates_OrganizationId",
-                table: "ParkingRates");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Devices_OrganizationId",
-                table: "Devices");
+            // These FK indexes may or may not exist depending on earlier provider conventions.
+            migrationBuilder.Sql("""DROP INDEX IF EXISTS "IX_ScannerConfigurations_OrganizationId";""");
+            migrationBuilder.Sql("""DROP INDEX IF EXISTS "IX_ParkingRates_OrganizationId";""");
+            migrationBuilder.Sql("""DROP INDEX IF EXISTS "IX_Devices_OrganizationId";""");
 
             migrationBuilder.AlterColumn<string>(
                 name: "RegistrationNumber",
