@@ -39,6 +39,39 @@ public class UserAdminService
         return result;
     }
 
+    public async Task<UserAdminDto> CreateAsync(CreateUserRequest request, CancellationToken ct = default)
+    {
+        var orgId = RequireOrganizationId();
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            throw new ValidationException("Email and password are required.");
+        if (!AppRoles.All.Contains(request.Role) || request.Role == AppRoles.SuperAdmin)
+            throw new ValidationException("Invalid role for organization users.");
+
+        var existing = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (existing is not null)
+            throw new ValidationException("A user with this email already exists.");
+
+        var user = new ApplicationUser
+        {
+            UserName = request.Email.Trim(),
+            Email = request.Email.Trim(),
+            DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Email.Trim() : request.DisplayName.Trim(),
+            OrganizationId = orgId,
+            EmailConfirmed = true,
+            IsActive = true
+        };
+
+        var create = await _userManager.CreateAsync(user, request.Password);
+        if (!create.Succeeded)
+            throw new ValidationException(string.Join("; ", create.Errors.Select(e => e.Description)));
+
+        await _userManager.AddToRoleAsync(user, request.Role);
+        await _audit.LogAsync(AuditAction.UserCreated, "User", user.Id,
+            $"Created user {user.Email} as {request.Role}", cancellationToken: ct);
+
+        return new UserAdminDto(user.Id, user.Email!, user.DisplayName, user.IsActive, [request.Role]);
+    }
+
     public async Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default)
     {
         var orgId = RequireOrganizationId();
@@ -75,3 +108,4 @@ public class UserAdminService
 }
 
 public record UserAdminDto(string Id, string Email, string DisplayName, bool IsActive, IReadOnlyList<string> Roles);
+public record CreateUserRequest(string Email, string Password, string DisplayName, string Role);

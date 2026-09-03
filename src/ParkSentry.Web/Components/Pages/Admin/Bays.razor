@@ -7,10 +7,14 @@
 <PageTitle>Parking Bays - ParkSentry</PageTitle>
 
 <h1>Parking Bays</h1>
+<p class="muted">Create areas, zones, and bays for the selected site. Bulk create is the fastest way to set up a new site.</p>
 
-<div class="form-group" style="max-width:300px">
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-danger">@Error</div> }
+@if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+
+<div class="form-group" style="max-width:320px">
     <label>Select Site</label>
-    <select class="form-control" @bind="SelectedSiteId" @bind:after="LoadBays">
+    <select class="form-control" @bind="SelectedSiteId" @bind:after="LoadAsync">
         @foreach (var site in SiteList)
         {
             <option value="@site.Id">@site.Name</option>
@@ -18,11 +22,47 @@
     </select>
 </div>
 
+@if (SelectedSiteId != Guid.Empty)
+{
+    <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
+        <div class="card">
+            <h3>Bulk create bays</h3>
+            <div class="form-grid">
+                <label>Area name <input class="form-control" @bind="BulkArea" /></label>
+                <label>Zone name <input class="form-control" @bind="BulkZone" /></label>
+                <label>Zone code <input class="form-control" @bind="BulkCode" /></label>
+                <label>Bay prefix <input class="form-control" @bind="BulkPrefix" placeholder="A" /></label>
+                <label>Start number <input class="form-control" type="number" @bind="BulkStart" /></label>
+                <label>Count <input class="form-control" type="number" @bind="BulkCount" /></label>
+            </div>
+            <button class="btn btn-primary" @onclick="BulkCreateAsync" disabled="@Busy">Create bays</button>
+        </div>
+
+        <div class="card">
+            <h3>Add single bay</h3>
+            <div class="form-grid">
+                <label>Zone
+                    <select class="form-control" @bind="SelectedZoneId">
+                        <option value="">Select zone</option>
+                        @foreach (var z in Zones)
+                        {
+                            <option value="@z.Id">@z.AreaName / @z.Name (@z.Code)</option>
+                        }
+                    </select>
+                </label>
+                <label>Bay number <input class="form-control" @bind="SingleBayNumber" /></label>
+            </div>
+            <button class="btn btn-primary" @onclick="CreateBayAsync" disabled="@Busy || string.IsNullOrEmpty(SelectedZoneId)">Add bay</button>
+            <button class="btn btn-outline" @onclick="CreateAreaZoneAsync" disabled="@Busy">Ensure area/zone from bulk fields</button>
+        </div>
+    </AuthorizeView>
+}
+
 @if (BayList.Count > 0)
 {
     <div class="card">
         <table>
-            <thead><tr><th>Bay</th><th>Zone</th><th>Type</th><th>Status</th></tr></thead>
+            <thead><tr><th>Bay</th><th>Zone</th><th>Type</th><th>Status</th><th></th></tr></thead>
             <tbody>
                 @foreach (var bay in BayList)
                 {
@@ -35,17 +75,39 @@
                                 @bay.Status
                             </span>
                         </td>
+                        <td>
+                            <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER">
+                                @if (bay.Status != BayStatus.Occupied)
+                                {
+                                    <button class="btn btn-outline btn-sm" @onclick="() => SetMaintenanceAsync(bay)">
+                                        @(bay.Status == BayStatus.Maintenance ? "Make available" : "Maintenance")
+                                    </button>
+                                }
+                            </AuthorizeView>
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
 }
+else if (SelectedSiteId != Guid.Empty)
+{
+    <div class="alert alert-warning">No bays for this site yet. Use bulk create above.</div>
+}
 
 @code {
+    private sealed record ZoneOption(Guid Id, string Name, string Code, string AreaName);
+
     private List<SiteDto> SiteList = [];
     private List<ParkingBayDto> BayList = [];
+    private List<ZoneOption> Zones = [];
     private Guid SelectedSiteId;
+    private string SelectedZoneId = "";
+    private string BulkArea = "Level 1", BulkZone = "Zone A", BulkCode = "A", BulkPrefix = "A";
+    private int BulkStart = 1, BulkCount = 10;
+    private string SingleBayNumber = "", Message = "", Error = "";
+    private bool Busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,10 +115,72 @@
         if (SiteList.Count > 0)
         {
             SelectedSiteId = SiteList[0].Id;
-            await LoadBays();
+            await LoadAsync();
         }
     }
 
-    private async Task LoadBays() =>
+    private async Task LoadAsync()
+    {
+        if (SelectedSiteId == Guid.Empty) return;
         BayList = (await BayService.GetBaysBySiteAsync(SelectedSiteId)).ToList();
+        var structure = await BayService.GetParkingStructureAsync(SelectedSiteId);
+        Zones = structure.SelectMany(a => a.Zones.Select(z => new ZoneOption(z.Id, z.Name, z.Code, a.Name))).ToList();
+    }
+
+    private async Task BulkCreateAsync()
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            var created = await BayService.BulkCreateBaysAsync(new BulkCreateBaysRequest(
+                SelectedSiteId, BulkArea, BulkZone, BulkCode, BulkPrefix, BulkStart, BulkCount));
+            Message = $"Created {created} bay(s).";
+            await LoadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
+
+    private async Task CreateAreaZoneAsync()
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            var area = await BayService.CreateAreaAsync(new CreateParkingAreaRequest(SelectedSiteId, BulkArea));
+            await BayService.CreateZoneAsync(new CreateParkingZoneRequest(area.Id, BulkZone, BulkCode));
+            Message = "Area/zone ensured.";
+            await LoadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
+
+    private async Task CreateBayAsync()
+    {
+        if (!Guid.TryParse(SelectedZoneId, out var zoneId)) return;
+        Busy = true; Error = Message = "";
+        try
+        {
+            await BayService.CreateBayAsync(new CreateParkingBayRequest(zoneId, SingleBayNumber));
+            Message = "Bay created.";
+            SingleBayNumber = "";
+            await LoadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
+
+    private async Task SetMaintenanceAsync(ParkingBayDto bay)
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            var next = bay.Status == BayStatus.Maintenance ? BayStatus.Available : BayStatus.Maintenance;
+            await BayService.UpdateBayAsync(bay.Id, new UpdateParkingBayRequest(bay.BayNumber, bay.Type, next, bay.IsReserved));
+            Message = $"Bay {bay.BayNumber} set to {next}.";
+            await LoadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
 }

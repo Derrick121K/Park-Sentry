@@ -29,4 +29,8 @@ public class VehiclesController : ControllerBase
         var vehicle = await _service.CreateAsync(request, ct);
         return CreatedAtAction(nameof(Search), new { registration = vehicle.RegistrationNumber }, vehicle);
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<VehicleDto>> Update(Guid id, [FromBody] UpdateVehicleRequest request, CancellationToken ct)
+        => Ok(await _service.UpdateAsync(id, request, ct));
 }

@@ -27,6 +27,7 @@ public class SiteService
         var sites = await _db.Sites
             .Where(s => s.OrganizationId == orgId && !s.IsDeleted)
             .Include(s => s.ParkingAreas).ThenInclude(a => a.ParkingZones).ThenInclude(z => z.ParkingBays)
+            .OrderBy(s => s.Name)
             .ToListAsync(ct);
 
         return sites.Select(MapSite).ToList();
@@ -45,20 +46,47 @@ public class SiteService
     public async Task<SiteDto> CreateAsync(CreateSiteRequest request, CancellationToken ct = default)
     {
         var orgId = RequireOrganizationId();
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ValidationException("Site name is required.");
 
         var site = new Site
         {
             OrganizationId = orgId,
-            Name = request.Name,
+            Name = request.Name.Trim(),
             Description = request.Description,
-            Address = request.Address
+            Address = request.Address,
+            IsActive = true
         };
 
         _db.Sites.Add(site);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(AuditAction.SiteCreated, nameof(Site), site.Id.ToString(), $"Created site {site.Name}", cancellationToken: ct);
 
-        return new SiteDto(site.Id, site.OrganizationId, site.Name, site.Address, site.IsActive, 0, 0, 0);
+        return new SiteDto(site.Id, site.OrganizationId, site.Name, site.Address, site.IsActive, 0, 0, 0, site.Description);
+    }
+
+    public async Task<SiteDto> UpdateAsync(Guid id, UpdateSiteRequest request, CancellationToken ct = default)
+    {
+        var orgId = RequireOrganizationId();
+        var site = await _db.Sites
+            .Include(s => s.ParkingAreas).ThenInclude(a => a.ParkingZones).ThenInclude(z => z.ParkingBays)
+            .FirstOrDefaultAsync(s => s.Id == id && s.OrganizationId == orgId && !s.IsDeleted, ct)
+            ?? throw new NotFoundException("Site not found.");
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ValidationException("Site name is required.");
+
+        site.Name = request.Name.Trim();
+        site.Description = request.Description;
+        site.Address = request.Address;
+        site.IsActive = request.IsActive;
+        site.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(AuditAction.OrganizationSettingsChanged, nameof(Site), site.Id.ToString(),
+            $"Updated site {site.Name} active={site.IsActive}", cancellationToken: ct);
+
+        return MapSite(site);
     }
 
     private Guid RequireOrganizationId()
@@ -77,6 +105,7 @@ public class SiteService
             site.Id, site.OrganizationId, site.Name, site.Address, site.IsActive,
             bays.Count,
             bays.Count(b => b.Status == BayStatus.Available),
-            bays.Count(b => b.Status == BayStatus.Occupied));
+            bays.Count(b => b.Status == BayStatus.Occupied),
+            site.Description);
     }
 }

@@ -50,7 +50,9 @@ public class DashboardService
             activeCount,
             todaySessions.Count,
             todaySessions.Count(s => s.ExitTime >= today),
-            todayRevenue);
+            todayRevenue,
+            await _db.SecurityEvents.CountAsync(e => e.OrganizationId == orgId && e.Status == SecurityEventStatus.Open, ct),
+            await _db.WatchlistEntries.CountAsync(w => w.OrganizationId == orgId && w.IsActive, ct));
     }
 
     public async Task<IReadOnlyList<AuditLogDto>> GetAuditLogsAsync(int limit = 50, CancellationToken ct = default)

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ParkSentry.Infrastructure.Authorization;
 using ParkSentry.Application.DTOs.Sites;
 using ParkSentry.Application.Services;
+using ParkSentry.Infrastructure.Authorization;
 
 namespace ParkSentry.Api.Controllers.V1;
 
@@ -33,4 +33,9 @@ public class SitesController : ControllerBase
         var site = await _service.CreateAsync(request, ct);
         return CreatedAtAction(nameof(GetById), new { id = site.Id }, site);
     }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.OrgAdminOrAbove)]
+    public async Task<ActionResult<SiteDto>> Update(Guid id, [FromBody] UpdateSiteRequest request, CancellationToken ct)
+        => Ok(await _service.UpdateAsync(id, request, ct));
 }

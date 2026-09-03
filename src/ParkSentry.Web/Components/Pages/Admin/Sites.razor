@@ -7,9 +7,32 @@
 
 <h1>Parking Sites</h1>
 
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-danger">@Error</div> }
+@if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+
+<AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
+    <div class="card">
+        <h3>@(EditingId.HasValue ? "Edit Site" : "Create Site")</h3>
+        <div class="form-grid">
+            <label>Name <input class="form-control" @bind="FormName" /></label>
+            <label>Address <input class="form-control" @bind="FormAddress" /></label>
+            <label>Description <input class="form-control" @bind="FormDescription" /></label>
+            @if (EditingId.HasValue)
+            {
+                <label><input type="checkbox" @bind="FormActive" /> Active</label>
+            }
+        </div>
+        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@Busy">@(EditingId.HasValue ? "Save" : "Create")</button>
+        @if (EditingId.HasValue)
+        {
+            <button class="btn btn-outline" @onclick="CancelEdit">Cancel</button>
+        }
+    </div>
+</AuthorizeView>
+
 <div class="card">
     <table>
-        <thead><tr><th>Name</th><th>Address</th><th>Total Bays</th><th>Available</th><th>Occupied</th><th>Status</th></tr></thead>
+        <thead><tr><th>Name</th><th>Address</th><th>Total</th><th>Available</th><th>Occupied</th><th>Status</th><th></th></tr></thead>
         <tbody>
             @foreach (var site in SiteList)
             {
@@ -20,6 +43,11 @@
                     <td>@site.AvailableBays</td>
                     <td>@site.OccupiedBays</td>
                     <td><span class="badge @(site.IsActive ? "badge-success" : "badge-danger")">@(site.IsActive ? "Active" : "Inactive")</span></td>
+                    <td>
+                        <AuthorizeView Roles="SUPER_ADMIN,ORGANIZATION_ADMIN">
+                            <button class="btn btn-outline btn-sm" @onclick="() => BeginEdit(site)">Edit</button>
+                        </AuthorizeView>
+                    </td>
                 </tr>
             }
         </tbody>
@@ -28,6 +56,50 @@
 
 @code {
     private List<SiteDto> SiteList = [];
-    protected override async Task OnInitializedAsync() =>
-        SiteList = (await SiteService.GetSitesAsync()).ToList();
+    private Guid? EditingId;
+    private string FormName = "", FormAddress = "", FormDescription = "", Message = "", Error = "";
+    private bool FormActive = true, Busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => SiteList = (await SiteService.GetSitesAsync()).ToList();
+
+    private void BeginEdit(SiteDto site)
+    {
+        EditingId = site.Id;
+        FormName = site.Name;
+        FormAddress = site.Address ?? "";
+        FormDescription = site.Description ?? "";
+        FormActive = site.IsActive;
+        Message = Error = "";
+    }
+
+    private void CancelEdit()
+    {
+        EditingId = null;
+        FormName = FormAddress = FormDescription = "";
+        FormActive = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            if (EditingId.HasValue)
+            {
+                await SiteService.UpdateAsync(EditingId.Value, new UpdateSiteRequest(FormName, FormDescription, FormAddress, FormActive));
+                Message = "Site updated.";
+            }
+            else
+            {
+                await SiteService.CreateAsync(new CreateSiteRequest(FormName, FormDescription, FormAddress));
+                Message = "Site created.";
+            }
+            CancelEdit();
+            await LoadAsync();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
 }

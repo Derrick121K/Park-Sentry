@@ -1,16 +1,34 @@
 @page "/admin/users"
 @attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN")]
 @inject ParkSentry.Infrastructure.Services.UserAdminService UserAdminService
+@using ParkSentry.Domain.Constants
 @rendermode InteractiveServer
 
 <PageTitle>Users - ParkSentry</PageTitle>
 
 <h1>Users</h1>
 
-@if (!string.IsNullOrEmpty(Error))
-{
-    <div class="alert alert-danger">@Error</div>
-}
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-danger">@Error</div> }
+@if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+
+<div class="card">
+    <h3>Create user</h3>
+    <div class="form-grid">
+        <label>Email <input class="form-control" @bind="Email" /></label>
+        <label>Display name <input class="form-control" @bind="DisplayName" /></label>
+        <label>Temporary password <input class="form-control" type="password" @bind="Password" /></label>
+        <label>Role
+            <select class="form-control" @bind="Role">
+                <option value="@AppRoles.OrganizationAdmin">Organization Admin</option>
+                <option value="@AppRoles.SiteManager">Site Manager</option>
+                <option value="@AppRoles.SecurityGuard">Security Guard</option>
+                <option value="@AppRoles.ParkingAttendant">Parking Attendant</option>
+                <option value="@AppRoles.Customer">Customer</option>
+            </select>
+        </label>
+    </div>
+    <button class="btn btn-primary" @onclick="CreateAsync" disabled="@Busy">Create</button>
+</div>
 
 <div class="card">
     <table>
@@ -21,7 +39,16 @@
             <tr>
                 <td>@user.Email</td>
                 <td>@user.DisplayName</td>
-                <td>@string.Join(", ", user.Roles)</td>
+                <td>
+                    <select class="form-control" style="min-width:180px" value="@(user.Roles.FirstOrDefault() ?? "")"
+                            @onchange="e => ChangeRoleAsync(user.Id, e.Value?.ToString())">
+                        <option value="@AppRoles.OrganizationAdmin">Organization Admin</option>
+                        <option value="@AppRoles.SiteManager">Site Manager</option>
+                        <option value="@AppRoles.SecurityGuard">Security Guard</option>
+                        <option value="@AppRoles.ParkingAttendant">Parking Attendant</option>
+                        <option value="@AppRoles.Customer">Customer</option>
+                    </select>
+                </td>
                 <td>@(user.IsActive ? "Yes" : "No")</td>
                 <td>
                     <button class="btn btn-outline btn-sm" @onclick="() => ToggleAsync(user)">
@@ -36,10 +63,25 @@
 
 @code {
     private List<ParkSentry.Infrastructure.Services.UserAdminDto> UserList = [];
-    private string? Error;
+    private string Email = "", DisplayName = "", Password = "", Role = AppRoles.SecurityGuard, Error = "", Message = "";
+    private bool Busy;
 
     protected override async Task OnInitializedAsync() =>
         UserList = (await UserAdminService.ListAsync()).ToList();
+
+    private async Task CreateAsync()
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            await UserAdminService.CreateAsync(new ParkSentry.Infrastructure.Services.CreateUserRequest(Email, Password, DisplayName, Role));
+            Message = "User created.";
+            Email = DisplayName = Password = "";
+            UserList = (await UserAdminService.ListAsync()).ToList();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
 
     private async Task ToggleAsync(ParkSentry.Infrastructure.Services.UserAdminDto user)
     {
@@ -47,6 +89,18 @@
         {
             await UserAdminService.SetActiveAsync(user.Id, !user.IsActive);
             UserList = (await UserAdminService.ListAsync()).ToList();
+        }
+        catch (Exception ex) { Error = ex.Message; }
+    }
+
+    private async Task ChangeRoleAsync(string userId, string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role)) return;
+        try
+        {
+            await UserAdminService.SetRoleAsync(userId, role);
+            UserList = (await UserAdminService.ListAsync()).ToList();
+            Message = "Role updated.";
         }
         catch (Exception ex) { Error = ex.Message; }
     }

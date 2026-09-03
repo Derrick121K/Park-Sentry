@@ -76,6 +76,25 @@ public class VehicleService
             .ToListAsync(ct);
     }
 
+    public async Task<VehicleDto> UpdateAsync(Guid id, UpdateVehicleRequest request, CancellationToken ct = default)
+    {
+        var orgId = RequireOrganizationId();
+        var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == id && v.OrganizationId == orgId && !v.IsDeleted, ct)
+            ?? throw new NotFoundException("Vehicle not found.");
+
+        vehicle.VehicleMake = request.VehicleMake;
+        vehicle.VehicleModel = request.VehicleModel;
+        vehicle.VehicleColour = request.VehicleColour;
+        vehicle.VehicleType = request.VehicleType;
+        vehicle.LicenceDiscNumber = request.LicenceDiscNumber;
+        vehicle.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(AuditAction.VehicleModified, nameof(Vehicle), vehicle.Id.ToString(),
+            $"Updated {vehicle.RegistrationNumber}", cancellationToken: ct);
+        return MapVehicle(vehicle);
+    }
+
     private Guid RequireOrganizationId()
     {
         if (!_tenant.OrganizationId.HasValue)

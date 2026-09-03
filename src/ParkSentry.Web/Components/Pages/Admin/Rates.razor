@@ -7,14 +7,27 @@
 
 <h1>Parking Rates</h1>
 
-@if (!string.IsNullOrEmpty(Error))
-{
-    <div class="alert alert-danger">@Error</div>
-}
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-danger">@Error</div> }
+@if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+
+<div class="card">
+    <h3>@(EditingId.HasValue ? "Edit rate" : "Create rate")</h3>
+    <div class="form-grid">
+        <label>Name <input class="form-control" @bind="Name" /></label>
+        <label>Grace minutes <input class="form-control" type="number" @bind="Grace" /></label>
+        <label>Daily maximum <input class="form-control" type="number" step="0.01" @bind="DailyMax" /></label>
+        <label><input type="checkbox" @bind="IsActive" /> Active</label>
+        <label style="grid-column:1/-1">Tiers JSON
+            <textarea class="form-control" rows="4" @bind="TiersJson"></textarea>
+        </label>
+    </div>
+    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@Busy">Save</button>
+    @if (EditingId.HasValue) { <button class="btn btn-outline" @onclick="CancelEdit">Cancel</button> }
+</div>
 
 <div class="card">
     <table>
-        <thead><tr><th>Name</th><th>Model</th><th>Grace</th><th>Daily Max</th><th>Active</th></tr></thead>
+        <thead><tr><th>Name</th><th>Model</th><th>Grace</th><th>Daily Max</th><th>Active</th><th></th></tr></thead>
         <tbody>
         @foreach (var rate in RateList)
         {
@@ -24,6 +37,7 @@
                 <td>@(rate.GracePeriodMinutes?.ToString() ?? "-")</td>
                 <td>@(rate.DailyMaximum?.ToString("0.00") ?? "-")</td>
                 <td>@(rate.IsActive ? "Yes" : "No")</td>
+                <td><button class="btn btn-outline btn-sm" @onclick="() => BeginEdit(rate)">Edit</button></td>
             </tr>
         }
         </tbody>
@@ -32,11 +46,51 @@
 
 @code {
     private List<ParkingRateDto> RateList = [];
-    private string? Error;
+    private Guid? EditingId;
+    private string Name = "Standard", TiersJson = """[{"FromMinutes":0,"ToMinutes":30,"Amount":0},{"FromMinutes":31,"ToMinutes":120,"Amount":10},{"FromMinutes":121,"ToMinutes":null,"Amount":20}]""";
+    private int? Grace = 30;
+    private decimal? DailyMax = 50;
+    private bool IsActive = true, Busy;
+    private string? Error, Message;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => RateList = (await ParkingRateService.ListAsync()).ToList();
+
+    private void BeginEdit(ParkingRateDto rate)
     {
-        try { RateList = (await ParkingRateService.ListAsync()).ToList(); }
+        EditingId = rate.Id;
+        Name = rate.Name;
+        Grace = rate.GracePeriodMinutes;
+        DailyMax = rate.DailyMaximum;
+        IsActive = rate.IsActive;
+        TiersJson = rate.TiersJson;
+    }
+
+    private void CancelEdit()
+    {
+        EditingId = null;
+        Name = "Standard";
+        Grace = 30;
+        DailyMax = 50;
+        IsActive = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        Busy = true; Error = Message = "";
+        try
+        {
+            var req = new UpsertParkingRateRequest(Name, null, PricingModel.Tiered, Grace, DailyMax, IsActive, TiersJson);
+            if (EditingId.HasValue)
+                await ParkingRateService.UpdateAsync(EditingId.Value, req);
+            else
+                await ParkingRateService.CreateAsync(req);
+            Message = "Rate saved.";
+            CancelEdit();
+            await LoadAsync();
+        }
         catch (Exception ex) { Error = ex.Message; }
+        finally { Busy = false; }
     }
 }

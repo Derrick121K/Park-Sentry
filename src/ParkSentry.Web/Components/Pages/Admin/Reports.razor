@@ -1,18 +1,34 @@
 @page "/admin/reports"
 @attribute [Authorize(Roles = "SUPER_ADMIN,ORGANIZATION_ADMIN,SITE_MANAGER")]
 @inject ReportingService ReportingService
+@inject SiteService SiteService
 @rendermode InteractiveServer
 
 <PageTitle>Reports - ParkSentry</PageTitle>
 
 <h1>Operational Report</h1>
-<p class="muted">Aggregated tenant metrics. Values are UTC date-filtered and organization-isolated.</p>
+<p class="muted">Tenant-isolated aggregates. Times are UTC.</p>
 
-@if (!string.IsNullOrEmpty(Error))
-{
-    <div class="alert alert-danger">@Error</div>
-}
-else if (Report is not null)
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-danger">@Error</div> }
+
+<div class="card">
+    <div class="form-grid">
+        <label>From (UTC date) <input class="form-control" type="date" @bind="FromDate" /></label>
+        <label>To (UTC date) <input class="form-control" type="date" @bind="ToDate" /></label>
+        <label>Site
+            <select class="form-control" @bind="SiteIdValue">
+                <option value="">All sites</option>
+                @foreach (var s in Sites)
+                {
+                    <option value="@s.Id">@s.Name</option>
+                }
+            </select>
+        </label>
+        <button class="btn btn-primary" @onclick="LoadAsync">Run report</button>
+    </div>
+</div>
+
+@if (Report is not null)
 {
     <div class="stats-grid">
         <div class="stat"><span>Active sessions</span><strong>@Report.ActiveSessions</strong></div>
@@ -28,25 +44,47 @@ else if (Report is not null)
 
     <div class="card">
         <h2>Payment methods</h2>
-        <table>
-            <thead><tr><th>Method</th><th>Count</th><th>Amount</th></tr></thead>
-            <tbody>
-            @foreach (var m in Report.PaymentMethodTotals)
-            {
-                <tr><td>@m.Method</td><td>@m.Count</td><td>@m.Amount.ToString("0.00")</td></tr>
-            }
-            </tbody>
-        </table>
+        @if (Report.PaymentMethodTotals.Count == 0)
+        {
+            <p class="muted">No payments in range.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Method</th><th>Count</th><th>Amount</th></tr></thead>
+                <tbody>
+                @foreach (var m in Report.PaymentMethodTotals)
+                {
+                    <tr><td>@m.Method</td><td>@m.Count</td><td>@m.Amount.ToString("0.00")</td></tr>
+                }
+                </tbody>
+            </table>
+        }
     </div>
 }
 
 @code {
     private OperationalReportDto? Report;
+    private List<SiteDto> Sites = [];
+    private DateTime FromDate = DateTime.UtcNow.Date;
+    private DateTime ToDate = DateTime.UtcNow.Date.AddDays(1);
+    private string SiteIdValue = "";
     private string? Error;
 
     protected override async Task OnInitializedAsync()
     {
-        try { Report = await ReportingService.GetOperationalReportAsync(); }
+        Sites = (await SiteService.GetSitesAsync()).ToList();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Error = null;
+        try
+        {
+            Guid? siteId = Guid.TryParse(SiteIdValue, out var id) ? id : null;
+            Report = await ReportingService.GetOperationalReportAsync(FromDate.ToUniversalTime().Date, ToDate.ToUniversalTime().Date.AddDays(1), siteId);
+        }
         catch (Exception ex) { Error = ex.Message; }
     }
 }
